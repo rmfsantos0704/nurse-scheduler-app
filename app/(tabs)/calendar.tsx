@@ -1,33 +1,20 @@
-import {
-  View, Text, StyleSheet, TouchableOpacity, Modal,
-  ScrollView, ActivityIndicator, RefreshControl
-} from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, ActivityIndicator, RefreshControl } from "react-native";
 import { useState, useCallback } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
-
-const API_URL = "http://192.168.1.49:5000/api"; // 🔥 replace with your IP
-
-type ScheduleType = "Quiz" | "Activity" | "Review" | "Class" | "Duty" | "Study";
+import { API_URL } from "../../constants/apiUrl";
+import { formatDate, getTypeColor, getTypeBg } from "../../utils/dateUtils";
+import { useTheme } from "../../context/ThemeContext";
 
 type ScheduleItem = {
   _id: string;
   title: string;
-  type: ScheduleType;
+  type: string;
   date: string;
   startTime: string;
   description?: string;
   isCompleted: boolean;
   isUrgent?: boolean;
-};
-
-const TYPE_COLORS: Record<string, string> = {
-  Quiz: "#BA7517", Activity: "#639922", Review: "#7F77DD",
-  Class: "#378ADD", Duty: "#D4537E", Study: "#378ADD",
-};
-const TYPE_BG: Record<string, string> = {
-  Quiz: "#FAEEDA", Activity: "#EAF3DE", Review: "#EEEDFE",
-  Class: "#E6F1FB", Duty: "#FBEAF0", Study: "#E6F1FB",
 };
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -37,6 +24,7 @@ const MONTHS = [
 ];
 
 export default function Calendar() {
+  const { colors } = useTheme();
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
@@ -104,9 +92,9 @@ export default function Calendar() {
 
   if (loading) {
     return (
-      <View style={s.loader}>
-        <ActivityIndicator color="#D4537E" size="large" />
-        <Text style={s.loaderTxt}>Loading calendar...</Text>
+      <View style={[s.loader, { backgroundColor: colors.background }]}>
+        <ActivityIndicator color={colors.primary} size="large" />
+        <Text style={[s.loaderTxt, { color: colors.textSecondary }]}>Loading calendar...</Text>
       </View>
     );
   }
@@ -122,20 +110,20 @@ export default function Calendar() {
   return (
     <>
       <ScrollView
-        style={s.screen}
+        style={[s.screen, { backgroundColor: colors.background }]}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#D4537E" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
-        <Text style={s.pageTitle}>Calendar</Text>
+        <Text style={[s.pageTitle, { color: colors.textPrimary }]}>Calendar</Text>
 
         {/* Month nav */}
-        <View style={s.monthNav}>
+        <View style={[s.monthNav, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
           <TouchableOpacity style={s.navBtn} onPress={prevMonth}>
-            <Ionicons name="chevron-back" size={20} color="#D4537E" />
+            <Ionicons name="chevron-back" size={20} color={colors.primary} />
           </TouchableOpacity>
-          <Text style={s.monthLabel}>{MONTHS[viewMonth]} {viewYear}</Text>
+          <Text style={[s.monthLabel, { color: colors.textPrimary }]}>{MONTHS[viewMonth]} {viewYear}</Text>
           <TouchableOpacity style={s.navBtn} onPress={nextMonth}>
-            <Ionicons name="chevron-forward" size={20} color="#D4537E" />
+            <Ionicons name="chevron-forward" size={20} color={colors.primary} />
           </TouchableOpacity>
         </View>
 
@@ -144,22 +132,22 @@ export default function Calendar() {
           {[["Duty","#D4537E"],["Quiz","#BA7517"],["Class","#378ADD"],["Activity","#639922"],["Review","#7F77DD"]].map(([l,c])=>(
             <View key={l} style={s.legendItem}>
               <View style={[s.legendDot,{backgroundColor:c}]}/>
-              <Text style={s.legendTxt}>{l}</Text>
+              <Text style={[s.legendTxt, { color: colors.textSecondary }]}>{l}</Text>
             </View>
           ))}
         </View>
 
         {/* Day headers */}
-        <View style={s.grid}>
+        <View style={[s.grid, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
           {DAYS.map(d => (
-            <View key={d} style={s.dayHeader}>
-              <Text style={s.dayHeaderTxt}>{d}</Text>
+            <View key={d} style={[s.dayHeader, { borderBottomColor: colors.primaryLight }]}>
+              <Text style={[s.dayHeaderTxt, { color: colors.textSecondary }]}>{d}</Text>
             </View>
           ))}
 
           {/* Calendar cells */}
           {cells.map((day, idx) => {
-            if (!day) return <View key={`e${idx}`} style={s.cell} />;
+            if (!day) return <View key={`e${idx}`} style={[s.cell, { borderColor: colors.background }]} />;
             const ds = dateStr(day);
             const dayItems = schedulesForDate(ds);
             const isToday = ds === todayStr;
@@ -172,15 +160,17 @@ export default function Calendar() {
                 key={ds}
                 style={[
                   s.cell,
-                  isToday && s.cellToday,
-                  isSelected && s.cellSelected,
+                  { borderColor: colors.background },
+                  isToday && { backgroundColor: colors.primaryLight },
+                  isSelected && { backgroundColor: colors.primary },
                 ]}
                 onPress={() => openDay(ds)}
                 activeOpacity={0.7}
               >
                 <Text style={[
                   s.cellNum,
-                  isToday && s.cellNumToday,
+                  { color: colors.textPrimary },
+                  isToday && { color: colors.primary },
                   isSelected && { color: "#fff" },
                 ]}>
                   {day}
@@ -189,10 +179,10 @@ export default function Calendar() {
                 {/* Dot indicators */}
                 {dayItems.length > 0 && (
                   <View style={s.dotRow}>
-                    {hasPending && <View style={[s.cellDot, { backgroundColor: "#D4537E" }]} />}
+                    {hasPending && <View style={[s.cellDot, { backgroundColor: colors.primary }]} />}
                     {hasDone && <View style={[s.cellDot, { backgroundColor: "#639922" }]} />}
                     {dayItems.length > 2 && (
-                      <Text style={s.moreIndicator}>+{dayItems.length}</Text>
+                      <Text style={[s.moreIndicator, { color: colors.textSecondary }]}>+{dayItems.length}</Text>
                     )}
                   </View>
                 )}
@@ -203,32 +193,32 @@ export default function Calendar() {
 
         {/* Monthly summary */}
         <View style={s.summaryRow}>
-          <View style={s.summaryCard}>
-            <Text style={[s.summaryNum, { color: "#D4537E" }]}>
+          <View style={[s.summaryCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <Text style={[s.summaryNum, { color: colors.primary }]}>
               {allSchedules.filter(s => {
                 const d = new Date(s.date + "T00:00:00");
                 return d.getMonth() === viewMonth && d.getFullYear() === viewYear;
               }).length}
             </Text>
-            <Text style={s.summaryLbl}>This month</Text>
+            <Text style={[s.summaryLbl, { color: colors.textSecondary }]}>This month</Text>
           </View>
-          <View style={s.summaryCard}>
+          <View style={[s.summaryCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
             <Text style={[s.summaryNum, { color: "#639922" }]}>
               {allSchedules.filter(s => {
                 const d = new Date(s.date + "T00:00:00");
                 return d.getMonth() === viewMonth && d.getFullYear() === viewYear && s.isCompleted;
               }).length}
             </Text>
-            <Text style={s.summaryLbl}>Completed</Text>
+            <Text style={[s.summaryLbl, { color: colors.textSecondary }]}>Completed</Text>
           </View>
-          <View style={s.summaryCard}>
+          <View style={[s.summaryCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
             <Text style={[s.summaryNum, { color: "#BA7517" }]}>
               {allSchedules.filter(s => {
                 const d = new Date(s.date + "T00:00:00");
                 return d.getMonth() === viewMonth && d.getFullYear() === viewYear && !s.isCompleted;
               }).length}
             </Text>
-            <Text style={s.summaryLbl}>Pending</Text>
+            <Text style={[s.summaryLbl, { color: colors.textSecondary }]}>Pending</Text>
           </View>
         </View>
 
@@ -242,48 +232,48 @@ export default function Calendar() {
         transparent
         onRequestClose={() => setDayModalVisible(false)}
       >
-        <View style={s.modalOverlay}>
-          <View style={s.modalSheet}>
+        <View style={[s.modalOverlay, { backgroundColor: "rgba(0,0,0,0.35)" }]}>
+          <View style={[s.modalSheet, { backgroundColor: colors.background }]}>
             {/* Modal header */}
             <View style={s.modalHeader}>
               <View>
-                <Text style={s.modalTitle}>
+                <Text style={[s.modalTitle, { color: colors.textPrimary }]}>
                   {selectedDate ? formatSelectedDate(selectedDate) : ""}
                 </Text>
-                <Text style={s.modalSub}>
+                <Text style={[s.modalSub, { color: colors.textSecondary }]}>
                   {selectedItems.length === 0
                     ? "Nothing scheduled"
                     : `${selectedItems.length} task${selectedItems.length > 1 ? "s" : ""} · ${selectedDone.length} done`}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setDayModalVisible(false)}>
-                <Ionicons name="close" size={22} color="#C97C95" />
+                <Ionicons name="close" size={22} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
               {selectedItems.length === 0 ? (
                 <View style={s.modalEmpty}>
-                  <Ionicons name="checkmark-circle-outline" size={40} color="#ED93B1" />
-                  <Text style={s.modalEmptyTxt}>Free day — nothing scheduled</Text>
+                  <Ionicons name="checkmark-circle-outline" size={40} color={colors.primaryDark} />
+                  <Text style={[s.modalEmptyTxt, { color: colors.textSecondary }]}>Free day — nothing scheduled</Text>
                 </View>
               ) : (
                 <>
                   {/* Pending */}
                   {selectedPending.length > 0 && (
                     <>
-                      <Text style={s.modalSectionLbl}>Pending</Text>
+                      <Text style={[s.modalSectionLbl, { color: colors.textSecondary }]}>Pending</Text>
                       {selectedPending.map(item => (
-                        <ModalItem key={item._id} item={item} />
+                        <ModalItem key={item._id} item={item} themeColors={colors} />
                       ))}
                     </>
                   )}
                   {/* Completed */}
                   {selectedDone.length > 0 && (
                     <>
-                      <Text style={s.modalSectionLbl}>Completed</Text>
+                      <Text style={[s.modalSectionLbl, { color: colors.textSecondary }]}>Completed</Text>
                       {selectedDone.map(item => (
-                        <ModalItem key={item._id} item={item} done />
+                        <ModalItem key={item._id} item={item} done themeColors={colors} />
                       ))}
                     </>
                   )}
@@ -298,15 +288,15 @@ export default function Calendar() {
   );
 }
 
-function ModalItem({ item, done }: { item: ScheduleItem; done?: boolean }) {
+function ModalItem({ item, done, themeColors }: { item: ScheduleItem; done?: boolean; themeColors: any }) {
   return (
-    <View style={[ms.row, done && ms.rowDone]}>
-      <View style={[ms.dot, { backgroundColor: TYPE_COLORS[item.type] || "#D4537E" }]} />
+    <View style={[ms.row, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }, done && ms.rowDone]}>
+      <View style={[ms.dot, { backgroundColor: getTypeColor(item.type) }]} />
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <Text style={ms.title} numberOfLines={1}>{item.title}</Text>
-          <View style={[ms.pill, { backgroundColor: TYPE_BG[item.type] }]}>
-            <Text style={[ms.pillTxt, { color: TYPE_COLORS[item.type] }]}>{item.type}</Text>
+          <Text style={[ms.title, { color: themeColors.textPrimary }]} numberOfLines={1}>{item.title}</Text>
+          <View style={[ms.pill, { backgroundColor: getTypeBg(item.type) }]}>
+            <Text style={[ms.pillTxt, { color: getTypeColor(item.type) }]}>{item.type}</Text>
           </View>
           {item.isUrgent && !done && (
             <View style={ms.urgentPill}>
@@ -315,22 +305,22 @@ function ModalItem({ item, done }: { item: ScheduleItem; done?: boolean }) {
           )}
         </View>
         {item.description ? (
-          <Text style={ms.sub} numberOfLines={1}>{item.description}</Text>
+          <Text style={[ms.sub, { color: themeColors.textSecondary }]} numberOfLines={1}>{item.description}</Text>
         ) : null}
       </View>
-      <Text style={ms.time}>{item.startTime}</Text>
+      <Text style={[ms.time, { color: themeColors.textSecondary }]}>{item.startTime}</Text>
       {done && <Ionicons name="checkmark-circle" size={18} color="#639922" style={{ marginLeft: 4 }} />}
     </View>
   );
 }
 
 const ms = StyleSheet.create({
-  row:       { backgroundColor: "#fff", borderWidth: 0.5, borderColor: "#F4C0D1", borderRadius: 11, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
+  row:       { borderWidth: 0.5, borderRadius: 11, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
   rowDone:   { opacity: 0.55 },
   dot:       { width: 9, height: 9, borderRadius: 5, flexShrink: 0 },
-  title:     { fontSize: 14, fontWeight: "500", color: "#72243E", flexShrink: 1 },
-  sub:       { fontSize: 11, color: "#C97C95", marginTop: 2 },
-  time:      { fontSize: 11, fontWeight: "500", color: "#C97C95", marginLeft: 4 },
+  title:     { fontSize: 14, fontWeight: "500", flexShrink: 1 },
+  sub:       { fontSize: 11, marginTop: 2 },
+  time:      { fontSize: 11, fontWeight: "500", marginLeft: 4 },
   pill:      { borderRadius: 20, paddingHorizontal: 6, paddingVertical: 2 },
   pillTxt:   { fontSize: 10, fontWeight: "500" },
   urgentPill:{ backgroundColor: "#FCEBEB", borderRadius: 20, paddingHorizontal: 6, paddingVertical: 2 },
@@ -338,38 +328,35 @@ const ms = StyleSheet.create({
 });
 
 const s = StyleSheet.create({
-  screen:         { flex: 1, backgroundColor: "#FFF5F8", padding: 16 },
-  loader:         { flex: 1, backgroundColor: "#FFF5F8", alignItems: "center", justifyContent: "center", gap: 12 },
-  loaderTxt:      { fontSize: 14, color: "#C97C95" },
-  pageTitle:      { fontSize: 22, fontWeight: "500", color: "#72243E", marginBottom: 16, paddingTop: 8 },
-  monthNav:       { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#fff", borderWidth: 0.5, borderColor: "#F4C0D1", borderRadius: 14, padding: 12, marginBottom: 14 },
-  monthLabel:     { fontSize: 16, fontWeight: "500", color: "#72243E" },
+  screen:         { flex: 1, padding: 16 },
+  loader:         { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
+  loaderTxt:      { fontSize: 14 },
+  pageTitle:      { fontSize: 22, fontWeight: "500", marginBottom: 16, paddingTop: 8 },
+  monthNav:       { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 0.5, borderRadius: 14, padding: 12, marginBottom: 14 },
+  monthLabel:     { fontSize: 16, fontWeight: "500" },
   navBtn:         { padding: 4 },
   legend:         { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
   legendItem:     { flexDirection: "row", alignItems: "center", gap: 4 },
   legendDot:      { width: 8, height: 8, borderRadius: 4 },
-  legendTxt:      { fontSize: 11, color: "#C97C95" },
-  grid:           { flexDirection: "row", flexWrap: "wrap", backgroundColor: "#fff", borderRadius: 16, borderWidth: 0.5, borderColor: "#F4C0D1", overflow: "hidden", marginBottom: 16 },
-  dayHeader:      { width: "14.28%", alignItems: "center", paddingVertical: 8, borderBottomWidth: 0.5, borderBottomColor: "#FFE4EC" },
-  dayHeaderTxt:   { fontSize: 11, fontWeight: "500", color: "#C97C95" },
-  cell:           { width: "14.28%", minHeight: 54, alignItems: "center", paddingTop: 8, paddingBottom: 6, borderWidth: 0.5, borderColor: "#FFF5F8" },
-  cellToday:      { backgroundColor: "#FFE4EC" },
-  cellSelected:   { backgroundColor: "#D4537E" },
-  cellNum:        { fontSize: 14, fontWeight: "500", color: "#72243E" },
-  cellNumToday:   { color: "#D4537E" },
+  legendTxt:      { fontSize: 11 },
+  grid:           { flexDirection: "row", flexWrap: "wrap", borderRadius: 16, borderWidth: 0.5, overflow: "hidden", marginBottom: 16 },
+  dayHeader:      { width: "14.28%", alignItems: "center", paddingVertical: 8, borderBottomWidth: 0.5 },
+  dayHeaderTxt:   { fontSize: 11, fontWeight: "500" },
+  cell:           { width: "14.28%", minHeight: 54, alignItems: "center", paddingTop: 8, paddingBottom: 6, borderWidth: 0.5 },
+  cellNum:        { fontSize: 14, fontWeight: "500" },
   dotRow:         { flexDirection: "row", alignItems: "center", gap: 2, marginTop: 3 },
   cellDot:        { width: 5, height: 5, borderRadius: 3 },
-  moreIndicator:  { fontSize: 9, color: "#C97C95", fontWeight: "500" },
+  moreIndicator:  { fontSize: 9, fontWeight: "500" },
   summaryRow:     { flexDirection: "row", gap: 10, marginBottom: 10 },
-  summaryCard:    { flex: 1, backgroundColor: "#fff", borderWidth: 0.5, borderColor: "#F4C0D1", borderRadius: 12, padding: 12, alignItems: "center" },
+  summaryCard:    { flex: 1, borderWidth: 0.5, borderRadius: 12, padding: 12, alignItems: "center" },
   summaryNum:     { fontSize: 22, fontWeight: "500" },
-  summaryLbl:     { fontSize: 11, color: "#C97C95", marginTop: 4 },
-  modalOverlay:   { flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" },
-  modalSheet:     { backgroundColor: "#FFF5F8", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: "80%" },
+  summaryLbl:     { fontSize: 11, marginTop: 4 },
+  modalOverlay:   { flex: 1, justifyContent: "flex-end" },
+  modalSheet:     { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: "80%" },
   modalHeader:    { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
-  modalTitle:     { fontSize: 16, fontWeight: "500", color: "#72243E", maxWidth: 260 },
-  modalSub:       { fontSize: 12, color: "#C97C95", marginTop: 3 },
-  modalSectionLbl:{ fontSize: 11, fontWeight: "500", color: "#C97C95", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, marginTop: 6 },
+  modalTitle:     { fontSize: 16, fontWeight: "500", maxWidth: 260 },
+  modalSub:       { fontSize: 12, marginTop: 3 },
+  modalSectionLbl:{ fontSize: 11, fontWeight: "500", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, marginTop: 6 },
   modalEmpty:     { alignItems: "center", paddingVertical: 36, gap: 10 },
-  modalEmptyTxt:  { fontSize: 14, color: "#C97C95" },
+  modalEmptyTxt:  { fontSize: 14 },
 });

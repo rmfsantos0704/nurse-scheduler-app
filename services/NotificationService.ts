@@ -1,5 +1,4 @@
 import * as Notifications from "expo-notifications";
-import * as Device from "expo-device";
 import { Platform } from "react-native";
 
 Notifications.setNotificationHandler({
@@ -13,8 +12,7 @@ Notifications.setNotificationHandler({
 });
 
 export async function registerForPushNotifications(): Promise<boolean> {
-  if (!Device.isDevice) return false;
-
+  // Only request permission for local notifications — no push token needed
   const { status: existing } = await Notifications.getPermissionsAsync();
   let finalStatus = existing;
 
@@ -34,6 +32,7 @@ export async function registerForPushNotifications(): Promise<boolean> {
     });
   }
 
+  // ✅ NO push token fetch — local notifications only
   return true;
 }
 
@@ -42,20 +41,18 @@ export async function scheduleActivityNotification(
   title: string,
   description: string,
   dateTime: Date
-): Promise<string | null> {
+): Promise<void> {
   const now = new Date();
-  if (dateTime <= now) return null;
+  if (dateTime <= now) return;
 
-  // Cancel any old notification for this schedule first
   await cancelNotification(id);
 
-  const notifId = await Notifications.scheduleNotificationAsync({
+  await Notifications.scheduleNotificationAsync({
     identifier: id,
     content: {
       title: `⏰ ${title}`,
       body: description || "Your scheduled activity is starting now.",
       sound: true,
-      badge: 1,
       data: { scheduleId: id },
     },
     trigger: {
@@ -64,7 +61,7 @@ export async function scheduleActivityNotification(
     },
   });
 
-  // Also schedule a 15-min early warning
+  // 15-min early warning
   const earlyTime = new Date(dateTime.getTime() - 15 * 60 * 1000);
   if (earlyTime > now) {
     await Notifications.scheduleNotificationAsync({
@@ -81,8 +78,6 @@ export async function scheduleActivityNotification(
       },
     });
   }
-
-  return notifId;
 }
 
 export async function cancelNotification(id: string) {

@@ -1,20 +1,16 @@
-import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Modal, TextInput, Alert, ActivityIndicator, RefreshControl, Platform
-} from "react-native";
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, Alert, ActivityIndicator, RefreshControl, Platform, Image } from "react-native";
 import { useState, useCallback } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Notifications from "expo-notifications";
-import {
-  registerForPushNotifications,
-  scheduleActivityNotification,
-  cancelNotification} from "../../services/NotificationService";
-
-const API_URL = "http://192.168.1.49:5000/api"; // 🔥 replace with your IP
-
-type ScheduleType = "Quiz" | "Activity" | "Review" | "Class" | "Duty" | "Study";
+import { registerForPushNotifications, scheduleActivityNotification, cancelNotification } from "../../services/NotificationService";
+import { API_URL } from "../../constants/apiUrl";
+import { TYPES, ScheduleType, TYPE_COLORS } from "../../constants/scheduleTypes";
+import { toTimeString, toDateString, buildDateTime } from "../../utils/dateUtils";
+import { ScheduleCard } from "../../components/ScheduleCard";
+import { useTheme } from "../../context/ThemeContext";
 
 type ScheduleItem = {
   _id: string;
@@ -27,37 +23,24 @@ type ScheduleItem = {
   isUrgent?: boolean;
 };
 
-const TYPE_COLORS: Record<string, string> = {
-  Quiz: "#BA7517", Activity: "#639922", Review: "#7F77DD",
-  Class: "#378ADD", Duty: "#D4537E", Study: "#378ADD",
+type ProfileData = {
+  name: string;
+  course: string;
+  year: string;
+  section: string;
+  school: string;
+  avatar: string | null;
 };
-const TYPE_BG: Record<string, string> = {
-  Quiz: "#FAEEDA", Activity: "#EAF3DE", Review: "#EEEDFE",
-  Class: "#E6F1FB", Duty: "#FBEAF0", Study: "#E6F1FB",
-};
-const TYPES: ScheduleType[] = ["Quiz", "Activity", "Review", "Class", "Duty", "Study"];
 
-const toTimeString = (d: Date) =>
-  d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-const toDateString = (d: Date) =>
-  d.toISOString().split("T")[0];
-
-const buildDateTime = (dateStr: string, timeStr: string): Date => {
-  const [year, month, day] = dateStr.split("-").map(Number);
-  const cleaned = timeStr.replace(/\./g, ":").trim();
-  const match = cleaned.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
-  if (!match) return new Date();
-  let hours = parseInt(match[1]);
-  const minutes = parseInt(match[2]);
-  const ampm = match[3]?.toUpperCase();
-  if (ampm === "PM" && hours < 12) hours += 12;
-  if (ampm === "AM" && hours === 12) hours = 0;
-  return new Date(year, month - 1, day, hours, minutes);
+const DEFAULT_PROFILE: ProfileData = {
+  name: "Maria Santos", course: "BS Nursing",
+  year: "3rd Year", section: "Section A", school: "", avatar: null,
 };
 
 export default function Home() {
+  const { colors } = useTheme();
   const [items, setItems] = useState<ScheduleItem[]>([]);
+  const [profile, setProfile] = useState<ProfileData>(DEFAULT_PROFILE);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
@@ -89,6 +72,9 @@ export default function Home() {
   useFocusEffect(useCallback(() => {
     registerForPushNotifications().then(setNotifGranted);
     fetchSchedules();
+    AsyncStorage.getItem("profileData").then(v => {
+      if (v) { const p = JSON.parse(v); setProfile(p); }
+    });
 
     const sub = Notifications.addNotificationReceivedListener(() => {});
     return () => sub.remove();
@@ -259,9 +245,9 @@ export default function Home() {
   // ─── RENDER ──────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <View style={s.loader}>
-        <ActivityIndicator color="#D4537E" size="large" />
-        <Text style={s.loaderTxt}>Loading your schedule...</Text>
+      <View style={[baseStyles.loader, { backgroundColor: colors.background }]}>
+        <ActivityIndicator color={colors.primary} size="large" />
+        <Text style={[baseStyles.loaderTxt, { color: colors.textSecondary }]}>Loading your schedule...</Text>
       </View>
     );
   }
@@ -269,51 +255,57 @@ export default function Home() {
   return (
     <>
       <ScrollView
-        style={s.screen}
+        style={[baseStyles.screen, { backgroundColor: colors.background }]}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#D4537E" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
         {/* GREETING */}
-        <View style={s.greetRow}>
+        <View style={baseStyles.greetRow}>
           <View>
-            <Text style={s.greetSub}>{greeting},</Text>
-            <Text style={s.greetName}>Maria Santos 👩‍⚕️</Text>
+            <Text style={[baseStyles.greetSub, { color: colors.textSecondary }]}>{greeting},</Text>
+            <Text style={[baseStyles.greetName, { color: colors.textPrimary }]}>{profile.name}</Text>
           </View>
-          <View style={s.avatar}><Text style={s.avatarTxt}>MS</Text></View>
+          {profile.avatar ? (
+            <Image source={{ uri: profile.avatar }} style={[baseStyles.avatar, { borderColor: colors.primaryLight }]} />
+          ) : (
+            <View style={[baseStyles.avatar, { backgroundColor: colors.primaryLight, borderColor: colors.primaryLight }]}>
+              <Text style={[baseStyles.avatarTxt, { color: colors.primary }]}>{profile.name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()}</Text>
+            </View>
+          )}
         </View>
 
         {/* OVERVIEW */}
-        <Text style={s.sec}>Today's overview</Text>
-        <View style={s.ovRow}>
-          {([["Total", total, "#D4537E"], ["Done", done, "#639922"], ["Pending", total - done, "#BA7517"]] as const).map(([l, n, c]) => (
-            <View key={l} style={s.ovCard}>
-              <Text style={[s.ovNum, { color: c }]}>{n}</Text>
-              <Text style={s.ovLbl}>{l}</Text>
+        <Text style={[baseStyles.sec, { color: colors.textSecondary }]}>Today's overview</Text>
+        <View style={baseStyles.ovRow}>
+          {([["Total", total, colors.primary], ["Done", done, "#639922"], ["Pending", total - done, "#BA7517"]] as const).map(([l, n, c]) => (
+            <View key={l} style={[baseStyles.ovCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+              <Text style={[baseStyles.ovNum, { color: c }]}>{n}</Text>
+              <Text style={[baseStyles.ovLbl, { color: colors.textSecondary }]}>{l}</Text>
             </View>
           ))}
         </View>
-        <View style={s.progMeta}>
-          <Text style={s.progLbl}>Progress today</Text>
-          <Text style={s.progPct}>{pct}%</Text>
+        <View style={baseStyles.progMeta}>
+          <Text style={[baseStyles.progLbl, { color: colors.textSecondary }]}>Progress today</Text>
+          <Text style={[baseStyles.progPct, { color: colors.primary }]}>{pct}%</Text>
         </View>
-        <View style={s.progWrap}>
-          <View style={[s.progBar, { width: `${pct}%` as any }]} />
+        <View style={[baseStyles.progWrap, { backgroundColor: colors.primaryLight }]}>
+          <View style={[baseStyles.progBar, { width: `${pct}%` as any, backgroundColor: colors.primary }]} />
         </View>
 
         {/* NEXT EVENT */}
         {nextItem && (
-          <View key="nextEvent">
-            <Text style={s.sec}>Next up</Text>
-            <View style={s.nextCard}>
-              <View style={s.nextIco}>
+          <View key={`nextEvent-${nextItem._id}`}>
+            <Text style={[baseStyles.sec, { color: colors.textSecondary }]}>Next up</Text>
+            <View style={[baseStyles.nextCard, { backgroundColor: colors.primary }]}>
+              <View style={[baseStyles.nextIco, { backgroundColor: "rgba(255,255,255,0.2)" }]}>
                 <Ionicons name="time-outline" size={22} color="#fff" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={s.nextTitle}>{nextItem.title}</Text>
-                <Text style={s.nextSub}>{nextItem.description || nextItem.type}</Text>
+                <Text style={baseStyles.nextTitle}>{nextItem.title}</Text>
+                <Text style={baseStyles.nextSub}>{nextItem.description || nextItem.type}</Text>
               </View>
-              <View style={s.nextBadge}>
-                <Text style={s.nextBadgeTxt}>{nextItem.startTime}</Text>
+              <View style={{ backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 }}>
+                <Text style={baseStyles.nextBadgeTxt}>{nextItem.startTime}</Text>
               </View>
             </View>
           </View>
@@ -322,13 +314,13 @@ export default function Home() {
         {/* ALERTS */}
         {urgentItems.length > 0 && (
           <View key="alerts">
-            <Text style={s.sec}>Needs attention</Text>
-            {urgentItems.map(item => (
-              <View key={item._id} style={s.alertCard}>
+            <Text style={[baseStyles.sec, { color: colors.textSecondary }]}>Needs attention</Text>
+            {urgentItems.map((item, idx) => (
+              <View key={`urgent-${item._id}-${idx}`} style={[baseStyles.alertCard, { backgroundColor: "#FAEEDA", borderColor: "#FAC775" }]}>
                 <Ionicons name="warning-outline" size={18} color="#BA7517" style={{ marginTop: 1 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={s.alertTitle}>{item.title}</Text>
-                  <Text style={s.alertSub}>{item.description || item.type} · {item.startTime}</Text>
+                  <Text style={[baseStyles.alertTitle, { color: "#633806" }]}>{item.title}</Text>
+                  <Text style={[baseStyles.alertSub, { color: "#854F0B" }]}>{item.description || item.type} · {item.startTime}</Text>
                 </View>
               </View>
             ))}
@@ -336,70 +328,39 @@ export default function Home() {
         )}
 
         {/* SCHEDULE LIST */}
-        <Text style={s.sec}>Schedule today</Text>
+        <Text style={[baseStyles.sec, { color: colors.textSecondary }]}>Schedule today</Text>
         {items.length === 0 ? (
-          <View key="emptySchedule" style={s.empty}>
-            <Ionicons name="calendar-outline" size={40} color="#ED93B1" />
-            <Text style={s.emptyTxt}>No schedules yet for today</Text>
-            <TouchableOpacity style={s.emptyBtn} onPress={openCreate}>
-              <Text style={s.emptyBtnTxt}>Add your first task</Text>
+          <View key="emptySchedule" style={baseStyles.empty}>
+            <Ionicons name="calendar-outline" size={40} color={colors.primaryDark} />
+            <Text style={[baseStyles.emptyTxt, { color: colors.textSecondary }]}>No schedules yet for today</Text>
+            <TouchableOpacity style={[baseStyles.emptyBtn, { backgroundColor: colors.primary }]} onPress={openCreate}>
+              <Text style={baseStyles.emptyBtnTxt}>Add your first task</Text>
             </TouchableOpacity>
           </View>
         ) : (
-          <View key="scheduleList">
-            {items.map(item => (
-              <View
-                key={item._id}
-                style={[
-                  s.schedItem,
-                  item.isUrgent && !item.isCompleted && s.schedUrgent,
-                  item.isCompleted && s.schedDone,
-                ]}
-              >
-                <Text style={[s.schedTime, item.isUrgent && !item.isCompleted && { color: "#D4537E" }]}>
-                  {item.startTime}
-                </Text>
-                <View style={[s.dot, { backgroundColor: TYPE_COLORS[item.type] || "#D4537E" }]} />
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
-                    <Text style={s.schedTitle} numberOfLines={1}>{item.title}</Text>
-                    <View style={[s.typePill, { backgroundColor: TYPE_BG[item.type] }]}>
-                      <Text style={[s.typePillTxt, { color: TYPE_COLORS[item.type] }]}>{item.type}</Text>
-                    </View>
-                  </View>
-                  {item.description ? (
-                    <Text style={s.schedSub} numberOfLines={1}>{item.description}</Text>
-                  ) : null}
-                </View>
-                <View style={s.actions}>
-                  <TouchableOpacity onPress={() => openEdit(item)} style={s.actionBtn}>
-                    <Ionicons name="pencil-outline" size={15} color="#C97C95" />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleDelete(item)} style={s.actionBtn}>
-                    <Ionicons name="trash-outline" size={15} color="#E24B4A" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => toggleComplete(item)}
-                    style={[s.check, item.isCompleted && s.checkDone]}
-                  >
-                    {item.isCompleted && <Ionicons name="checkmark" size={13} color="#fff" />}
-                  </TouchableOpacity>
-                </View>
-              </View>
+          <View key={`scheduleList-${items.length}`}>
+            {items.map((item, idx) => (
+              <ScheduleCard
+                key={`${item._id}-${idx}`}
+                item={item}
+                onEdit={() => openEdit(item)}
+                onDelete={() => handleDelete(item)}
+                onToggleComplete={() => toggleComplete(item)}
+              />
             ))}
           </View>
         )}
 
         {/* QUICK ACTIONS */}
-        <Text style={s.sec}>Quick actions</Text>
-        <View style={s.quickRow}>
-          <TouchableOpacity style={s.qBtn} onPress={openCreate}>
-            <Ionicons name="add-circle-outline" size={22} color="#D4537E" />
-            <Text style={s.qBtnTxt}>Add schedule</Text>
+        <Text style={[baseStyles.sec, { color: colors.textSecondary }]}>Quick actions</Text>
+        <View style={baseStyles.quickRow}>
+          <TouchableOpacity style={[baseStyles.qBtn, { backgroundColor: colors.card, borderColor: colors.primaryLight }]} onPress={openCreate}>
+            <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+            <Text style={[baseStyles.qBtnTxt, { color: colors.textPrimary }]}>Add schedule</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.qBtn} onPress={onRefresh}>
-            <Ionicons name="refresh-outline" size={22} color="#D4537E" />
-            <Text style={s.qBtnTxt}>Refresh</Text>
+          <TouchableOpacity style={[baseStyles.qBtn, { backgroundColor: colors.card, borderColor: colors.primaryLight }]} onPress={onRefresh}>
+            <Ionicons name="refresh-outline" size={22} color={colors.primary} />
+            <Text style={[baseStyles.qBtnTxt, { color: colors.textPrimary }]}>Refresh</Text>
           </TouchableOpacity>
         </View>
         <View style={{ height: 40 }} />
@@ -407,28 +368,28 @@ export default function Home() {
 
       {/* ─── ADD / EDIT MODAL ─── */}
       <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={closeModal}>
-        <View style={s.overlay}>
-          <View style={s.sheet}>
-            <View style={s.sheetHeader}>
-              <Text style={s.sheetTitle}>{editingItem ? "Edit schedule" : "Add schedule"}</Text>
+        <View style={[baseStyles.overlay, { backgroundColor: "rgba(0,0,0,0.35)" }]}>
+          <View style={[baseStyles.sheet, { backgroundColor: colors.background }]}>
+            <View style={baseStyles.sheetHeader}>
+              <Text style={[baseStyles.sheetTitle, { color: colors.textPrimary }]}>{editingItem ? "Edit schedule" : "Add schedule"}</Text>
               <TouchableOpacity onPress={closeModal}>
-                <Ionicons name="close" size={22} color="#C97C95" />
+                <Ionicons name="close" size={22} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {/* TITLE */}
-              <Text style={s.fieldLbl}>Title *</Text>
+              <Text style={[baseStyles.fieldLbl, { color: colors.textSecondary }]}>Title *</Text>
               <TextInput
-                style={s.input}
+                style={[baseStyles.input, { backgroundColor: colors.card, borderColor: colors.cardBorder, color: colors.textPrimary }]}
                 placeholder="e.g. Pharmacology Quiz"
-                placeholderTextColor="#C97C95"
+                placeholderTextColor={colors.textSecondary}
                 value={title}
                 onChangeText={setTitle}
               />
 
               {/* TYPE */}
-              <Text style={s.fieldLbl}>Type *</Text>
+              <Text style={[baseStyles.fieldLbl, { color: colors.textSecondary }]}>Type *</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
                 <View style={{ flexDirection: "row", gap: 8 }}>
                   {TYPES.map(t => (
@@ -436,29 +397,30 @@ export default function Home() {
                       key={t}
                       onPress={() => setSelectedType(t)}
                       style={[
-                        s.typeChip,
+                        baseStyles.typeChip,
+                        { borderColor: colors.cardBorder, backgroundColor: colors.card },
                         selectedType === t && {
                           backgroundColor: TYPE_COLORS[t],
                           borderColor: TYPE_COLORS[t],
                         },
                       ]}
                     >
-                      <Text style={[s.typeChipTxt, selectedType === t && { color: "#fff" }]}>{t}</Text>
+                      <Text style={[baseStyles.typeChipTxt, selectedType === t && { color: "#fff" }, selectedType !== t && { color: colors.textSecondary }]}>{t}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
               </ScrollView>
 
               {/* DATE PICKER */}
-              <Text style={s.fieldLbl}>Date *</Text>
-              <TouchableOpacity style={s.pickerBtn} onPress={() => setShowDatePicker(true)}>
-                <Ionicons name="calendar-outline" size={18} color="#D4537E" />
-                <Text style={s.pickerTxt}>
+              <Text style={[baseStyles.fieldLbl, { color: colors.textSecondary }]}>Date *</Text>
+              <TouchableOpacity style={[baseStyles.pickerBtn, { backgroundColor: colors.card, borderColor: colors.cardBorder }]} onPress={() => setShowDatePicker(true)}>
+                <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                <Text style={[baseStyles.pickerTxt, { color: colors.textPrimary }]}>
                   {selectedDate.toLocaleDateString([], {
                     weekday: "short", month: "long", day: "numeric", year: "numeric",
                   })}
                 </Text>
-                <Ionicons name="chevron-down" size={16} color="#C97C95" />
+                <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
               </TouchableOpacity>
               {showDatePicker && (
                 <DateTimePicker
@@ -474,11 +436,11 @@ export default function Home() {
               )}
 
               {/* TIME PICKER */}
-              <Text style={s.fieldLbl}>Start time *</Text>
-              <TouchableOpacity style={s.pickerBtn} onPress={() => setShowTimePicker(true)}>
-                <Ionicons name="time-outline" size={18} color="#D4537E" />
-                <Text style={s.pickerTxt}>{toTimeString(selectedTime)}</Text>
-                <Ionicons name="chevron-down" size={16} color="#C97C95" />
+              <Text style={[baseStyles.fieldLbl, { color: colors.textSecondary }]}>Start time *</Text>
+              <TouchableOpacity style={[baseStyles.pickerBtn, { backgroundColor: colors.card, borderColor: colors.cardBorder }]} onPress={() => setShowTimePicker(true)}>
+                <Ionicons name="time-outline" size={18} color={colors.primary} />
+                <Text style={[baseStyles.pickerTxt, { color: colors.textPrimary }]}>{toTimeString(selectedTime)}</Text>
+                <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
               </TouchableOpacity>
               {showTimePicker && (
                 <DateTimePicker
@@ -494,28 +456,28 @@ export default function Home() {
               )}
 
               {/* DESCRIPTION */}
-              <Text style={s.fieldLbl}>Description / notes</Text>
+              <Text style={[baseStyles.fieldLbl, { color: colors.textSecondary }]}>Description / notes</Text>
               <TextInput
-                style={[s.input, { height: 75, textAlignVertical: "top" }]}
+                style={[baseStyles.input, { height: 75, textAlignVertical: "top", backgroundColor: colors.card, borderColor: colors.cardBorder, color: colors.textPrimary }]}
                 placeholder="Room 201 · submit via portal..."
-                placeholderTextColor="#C97C95"
+                placeholderTextColor={colors.textSecondary}
                 multiline
                 value={description}
                 onChangeText={setDescription}
               />
 
               {/* URGENT */}
-              <TouchableOpacity style={s.urgRow} onPress={() => setIsUrgent(v => !v)}>
-                <View style={[s.urgBox, isUrgent && s.urgBoxOn]}>
+              <TouchableOpacity style={baseStyles.urgRow} onPress={() => setIsUrgent(v => !v)}>
+                <View style={[baseStyles.urgBox, { borderColor: colors.primary }, isUrgent && { backgroundColor: colors.primary }]}>
                   {isUrgent && <Ionicons name="checkmark" size={13} color="#fff" />}
                 </View>
-                <Text style={s.urgLbl}>Mark as urgent / needs attention</Text>
+                <Text style={[baseStyles.urgLbl, { color: colors.textPrimary }]}>Mark as urgent / needs attention</Text>
               </TouchableOpacity>
 
               {/* NOTIFICATION INFO */}
-              <View style={s.notifInfo}>
+              <View style={[baseStyles.notifInfo, { backgroundColor: colors.background, borderColor: colors.cardBorder }]}>
                 <Ionicons name="notifications-outline" size={15} color={notifGranted ? "#639922" : "#BA7517"} />
-                <Text style={[s.notifTxt, { color: notifGranted ? "#3B6D11" : "#633806" }]}>
+                <Text style={[baseStyles.notifTxt, { color: notifGranted ? "#3B6D11" : "#633806" }]}>
                   {notifGranted
                     ? "Notifications enabled — you'll be alerted at the set time"
                     : "Notifications not granted — enable in phone settings"}
@@ -524,22 +486,22 @@ export default function Home() {
 
               {/* SUBMIT */}
               <TouchableOpacity
-                style={[s.submitBtn, saving && { opacity: 0.6 }]}
+                style={[baseStyles.submitBtn, { backgroundColor: colors.primary }, saving && { opacity: 0.6 }]}
                 onPress={editingItem ? handleUpdate : handleCreate}
                 disabled={saving}
               >
                 {saving
                   ? <ActivityIndicator color="#fff" />
-                  : <Text style={s.submitTxt}>{editingItem ? "Save changes" : "Add to schedule"}</Text>}
+                  : <Text style={baseStyles.submitTxt}>{editingItem ? "Save changes" : "Add to schedule"}</Text>}
               </TouchableOpacity>
 
               {editingItem && (
                 <TouchableOpacity
-                  style={s.delModalBtn}
+                  style={baseStyles.delModalBtn}
                   onPress={() => { closeModal(); setTimeout(() => handleDelete(editingItem), 300); }}
                 >
                   <Ionicons name="trash-outline" size={15} color="#E24B4A" />
-                  <Text style={s.delModalTxt}>Delete this schedule</Text>
+                  <Text style={baseStyles.delModalTxt}>Delete this schedule</Text>
                 </TouchableOpacity>
               )}
               <View style={{ height: 30 }} />
@@ -551,71 +513,57 @@ export default function Home() {
   );
 }
 
-const s = StyleSheet.create({
-  screen:       { flex: 1, backgroundColor: "#FFF5F8", padding: 16 },
-  loader:       { flex: 1, backgroundColor: "#FFF5F8", alignItems: "center", justifyContent: "center", gap: 12 },
-  loaderTxt:    { fontSize: 14, color: "#C97C95" },
+const baseStyles = StyleSheet.create({
+  screen:       { flex: 1, padding: 16 },
+  loader:       { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
+  loaderTxt:    { fontSize: 14 },
   greetRow:     { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20, paddingTop: 8 },
-  greetSub:     { fontSize: 13, color: "#C97C95" },
-  greetName:    { fontSize: 20, fontWeight: "500", color: "#72243E" },
-  avatar:       { width: 42, height: 42, borderRadius: 21, backgroundColor: "#FFE4EC", borderWidth: 2, borderColor: "#ED93B1", alignItems: "center", justifyContent: "center" },
-  avatarTxt:    { fontSize: 13, fontWeight: "500", color: "#993556" },
-  sec:          { fontSize: 11, fontWeight: "500", color: "#C97C95", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 8, marginTop: 8 },
+  greetSub:     { fontSize: 13 },
+  greetName:    { fontSize: 20, fontWeight: "500" },
+  avatar:       { width: 42, height: 42, borderRadius: 21, backgroundColor: "#FFE4EC", borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  avatarTxt:    { fontSize: 13, fontWeight: "500" },
+  sec:          { fontSize: 11, fontWeight: "500", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 8, marginTop: 8 },
   ovRow:        { flexDirection: "row", gap: 10, marginBottom: 10 },
-  ovCard:       { flex: 1, backgroundColor: "#fff", borderWidth: 0.5, borderColor: "#F4C0D1", borderRadius: 12, padding: 12, alignItems: "center" },
+  ovCard:       { flex: 1, borderWidth: 0.5, borderRadius: 12, padding: 12, alignItems: "center" },
   ovNum:        { fontSize: 22, fontWeight: "500" },
-  ovLbl:        { fontSize: 11, color: "#C97C95", marginTop: 4 },
+  ovLbl:        { fontSize: 11, marginTop: 4 },
   progMeta:     { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
-  progLbl:      { fontSize: 11, color: "#C97C95" },
-  progPct:      { fontSize: 11, fontWeight: "500", color: "#D4537E" },
-  progWrap:     { height: 6, backgroundColor: "#FFE4EC", borderRadius: 6, overflow: "hidden", marginBottom: 18 },
-  progBar:      { height: 6, backgroundColor: "#D4537E", borderRadius: 6 },
-  nextCard:     { backgroundColor: "#D4537E", borderRadius: 16, padding: 16, flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 18 },
-  nextIco:      { width: 40, height: 40, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },
+  progLbl:      { fontSize: 11 },
+  progPct:      { fontSize: 11, fontWeight: "500" },
+  progWrap:     { height: 6, borderRadius: 6, overflow: "hidden", marginBottom: 18 },
+  progBar:      { height: 6, borderRadius: 6 },
+  nextCard:     { borderRadius: 16, padding: 16, flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 18 },
+  nextIco:      { width: 40, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   nextTitle:    { fontSize: 15, fontWeight: "500", color: "#fff" },
   nextSub:      { fontSize: 12, color: "rgba(255,255,255,0.8)", marginTop: 2 },
-  nextBadge:    { backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
   nextBadgeTxt: { fontSize: 11, color: "#fff" },
-  alertCard:    { backgroundColor: "#FAEEDA", borderWidth: 0.5, borderColor: "#FAC775", borderRadius: 12, padding: 12, marginBottom: 10, flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  alertTitle:   { fontSize: 13, fontWeight: "500", color: "#633806" },
-  alertSub:     { fontSize: 12, color: "#854F0B", marginTop: 2 },
-  schedItem:    { backgroundColor: "#fff", borderWidth: 0.5, borderColor: "#F4C0D1", borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
-  schedUrgent:  { borderColor: "#D4537E", borderWidth: 1 },
-  schedDone:    { opacity: 0.5 },
-  schedTime:    { fontSize: 11, fontWeight: "500", color: "#C97C95", width: 48, textAlign: "center" },
-  dot:          { width: 9, height: 9, borderRadius: 5 },
-  schedTitle:   { fontSize: 14, fontWeight: "500", color: "#72243E", flexShrink: 1 },
-  schedSub:     { fontSize: 11, color: "#C97C95", marginTop: 1 },
-  typePill:     { borderRadius: 20, paddingHorizontal: 6, paddingVertical: 2 },
-  typePillTxt:  { fontSize: 10, fontWeight: "500" },
-  actions:      { flexDirection: "row", alignItems: "center", gap: 6 },
-  actionBtn:    { padding: 4 },
-  check:        { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: "#D4537E", alignItems: "center", justifyContent: "center" },
-  checkDone:    { backgroundColor: "#D4537E" },
+  alertCard:    { borderWidth: 0.5, borderRadius: 12, padding: 12, marginBottom: 10, flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  alertTitle:   { fontSize: 13, fontWeight: "500" },
+  alertSub:     { fontSize: 12, marginTop: 2 },
   empty:        { alignItems: "center", paddingVertical: 40, gap: 10 },
-  emptyTxt:     { fontSize: 14, color: "#C97C95" },
-  emptyBtn:     { backgroundColor: "#D4537E", borderRadius: 20, paddingHorizontal: 20, paddingVertical: 10 },
+  emptyTxt:     { fontSize: 14 },
+  emptyBtn:     { borderRadius: 20, paddingHorizontal: 20, paddingVertical: 10 },
   emptyBtnTxt:  { color: "#fff", fontSize: 13, fontWeight: "500" },
   quickRow:     { flexDirection: "row", gap: 10 },
-  qBtn:         { flex: 1, backgroundColor: "#fff", borderWidth: 0.5, borderColor: "#ED93B1", borderRadius: 12, padding: 14, alignItems: "center", gap: 6 },
-  qBtnTxt:      { fontSize: 12, fontWeight: "500", color: "#993556" },
-  overlay:      { flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" },
-  sheet:        { backgroundColor: "#FFF5F8", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: "92%" },
+  qBtn:         { flex: 1, borderWidth: 0.5, borderRadius: 12, padding: 14, alignItems: "center", gap: 6 },
+  qBtnTxt:      { fontSize: 12, fontWeight: "500" },
+  overlay:      { flex: 1, justifyContent: "flex-end" },
+  sheet:        { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: "92%" },
   sheetHeader:  { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
-  sheetTitle:   { fontSize: 18, fontWeight: "500", color: "#72243E" },
-  fieldLbl:     { fontSize: 12, fontWeight: "500", color: "#C97C95", marginBottom: 6, marginTop: 4 },
-  input:        { backgroundColor: "#fff", borderWidth: 0.5, borderColor: "#F4C0D1", borderRadius: 10, padding: 12, fontSize: 14, color: "#72243E", marginBottom: 14 },
-  pickerBtn:    { backgroundColor: "#fff", borderWidth: 0.5, borderColor: "#F4C0D1", borderRadius: 10, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
-  pickerTxt:    { flex: 1, fontSize: 14, color: "#72243E" },
-  typeChip:     { borderWidth: 1, borderColor: "#F4C0D1", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: "#fff" },
-  typeChipTxt:  { fontSize: 13, color: "#C97C95", fontWeight: "500" },
+  sheetTitle:   { fontSize: 18, fontWeight: "500" },
+  fieldLbl:     { fontSize: 12, fontWeight: "500", marginBottom: 6, marginTop: 4 },
+  input:        { borderWidth: 0.5, borderRadius: 10, padding: 12, fontSize: 14, marginBottom: 14 },
+  pickerBtn:    { borderWidth: 0.5, borderRadius: 10, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
+  pickerTxt:    { flex: 1, fontSize: 14 },
+  typeChip:     { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
+  typeChipTxt:  { fontSize: 13, fontWeight: "500" },
   urgRow:       { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
-  urgBox:       { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: "#D4537E", alignItems: "center", justifyContent: "center" },
-  urgBoxOn:     { backgroundColor: "#D4537E" },
-  urgLbl:       { fontSize: 13, color: "#72243E" },
-  notifInfo:    { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: "#FFF5F8", borderWidth: 0.5, borderColor: "#F4C0D1", borderRadius: 10, padding: 10, marginBottom: 14 },
+  urgBox:       { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  urgBoxOn:     {},
+  urgLbl:       { fontSize: 13 },
+  notifInfo:    { flexDirection: "row", alignItems: "flex-start", gap: 8, borderWidth: 0.5, borderRadius: 10, padding: 10, marginBottom: 14 },
   notifTxt:     { fontSize: 12, flex: 1, lineHeight: 18 },
-  submitBtn:    { backgroundColor: "#D4537E", borderRadius: 12, padding: 15, alignItems: "center", marginBottom: 10 },
+  submitBtn:    { borderRadius: 12, padding: 15, alignItems: "center", marginBottom: 10 },
   submitTxt:    { color: "#fff", fontSize: 15, fontWeight: "500" },
   delModalBtn:  { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, padding: 10 },
   delModalTxt:  { color: "#E24B4A", fontSize: 13 },
