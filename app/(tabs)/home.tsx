@@ -38,7 +38,7 @@ const DEFAULT_PROFILE: ProfileData = {
 };
 
 export default function Home() {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const [items, setItems] = useState<ScheduleItem[]>([]);
   const [profile, setProfile] = useState<ProfileData>(DEFAULT_PROFILE);
   const [loading, setLoading] = useState(true);
@@ -132,12 +132,17 @@ export default function Home() {
       );
       // Schedule notification
       if (notifGranted) {
-        const dt = buildDateTime(dateStr, timeStr);
-        await scheduleActivityNotification(
-          newItem._id, newItem.title,
-          newItem.description || newItem.type, dt
-        );
-      }
+          const dt = buildDateTime(dateStr, timeStr);
+          await scheduleActivityNotification(
+            newItem._id,
+            newItem.title,
+            newItem.type,           // ← new
+            newItem.description ?? "",
+            dt,
+            newItem.isUrgent ?? false,  // ← new
+            scheme                  // ← new
+          );
+        }
       closeModal();
     } catch {
       Alert.alert("Error", "Could not save schedule.");
@@ -169,12 +174,17 @@ export default function Home() {
           .sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? ""))
       );
       if (notifGranted) {
-        const dt = buildDateTime(dateStr, timeStr);
-        await scheduleActivityNotification(
-          updated._id, updated.title,
-          updated.description || updated.type, dt
-        );
-      }
+          const dt = buildDateTime(dateStr, timeStr);
+          await scheduleActivityNotification(
+            updated._id,
+            updated.title,
+            updated.type,           // ← new
+            updated.description ?? "",
+            dt,
+            updated.isUrgent ?? false,  // ← new
+            scheme                  // ← new
+          );
+        }
       closeModal();
     } catch {
       Alert.alert("Error", "Could not update schedule.");

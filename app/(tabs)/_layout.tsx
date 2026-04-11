@@ -15,6 +15,7 @@ export default function TabLayout() {
           backgroundColor: colors.tabBar,
           borderTopWidth: 0,
           elevation: 0,
+          shadowOpacity: 0,
         },
       }}
     >

@@ -99,18 +99,23 @@ type ThemeContextType = {
   setScheme: (s: ColorScheme) => void;
 };
 
-const ThemeContext = createContext<ThemeContextType>({} as ThemeContextType);
+const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>("light");
   const [scheme, setSchemeState] = useState<ColorScheme>("pink");
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
+    // Set initialized immediately with defaults, then load persisted values
+    setIsInitialized(true);
     AsyncStorage.multiGet(["themeMode", "themeScheme"]).then(pairs => {
       const m = pairs[0][1] as ThemeMode | null;
       const sc = pairs[1][1] as ColorScheme | null;
       if (m) setMode(m);
       if (sc) setSchemeState(sc);
+    }).catch(() => {
+      // If AsyncStorage fails, we already have defaults
     });
   }, []);
 
@@ -134,4 +139,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export const useTheme = () => useContext(ThemeContext);
+export const useTheme = () => {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error("useTheme must be used within ThemeProvider");
+  }
+  return context;
+};

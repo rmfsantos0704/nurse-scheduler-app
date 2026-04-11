@@ -7,7 +7,6 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { useTheme, ColorScheme } from "../../context/ThemeContext";
-
 // Install: npx expo install expo-image-picker
 
 type ProfileData = {
