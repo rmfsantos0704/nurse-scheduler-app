@@ -3,7 +3,7 @@ import { useState, useCallback } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { API_URL } from "../../constants/apiUrl";
-import { formatDate, getTypeColor, getTypeBg } from "../../utils/dateUtils";
+import { formatDate, getTypeColor, getTypeBg, isPastDateTime } from "../../utils/dateUtils";
 import { useTheme } from "../../context/ThemeContext";
 
 type ScheduleItem = {
@@ -83,8 +83,11 @@ export default function Calendar() {
   const selectedItems = selectedDate ? schedulesForDate(selectedDate) : [];
   const selectedDone = selectedItems.filter(i => i.isCompleted);
   const selectedPending = selectedItems.filter(i => !i.isCompleted);
+  const selectedOverdue = selectedItems.filter(i => !i.isCompleted && isPastDateTime(i.date, i.startTime));
+  const totalOverdue = allSchedules.filter(s => !s.isCompleted && isPastDateTime(s.date, s.startTime)).length;
 
   const formatSelectedDate = (ds: string) => {
+    if (!ds) return "";
     const [y, m, d] = ds.split("-").map(Number);
     const dt = new Date(y, m - 1, d);
     return dt.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" });
@@ -114,7 +117,15 @@ export default function Calendar() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
-        <Text style={[s.pageTitle, { color: colors.textPrimary }]}>Calendar</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 }}>
+          <Text style={[s.pageTitle, { color: colors.textPrimary }]}>Calendar</Text>
+          {totalOverdue > 0 && (
+            <View style={{ backgroundColor: "#E24B4A", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Ionicons name="warning" size={14} color="#fff" />
+              <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>{totalOverdue} overdue</Text>
+            </View>
+          )}
+        </View>
 
         {/* Month nav */}
         <View style={[s.monthNav, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
@@ -243,6 +254,8 @@ export default function Calendar() {
                 <Text style={[s.modalSub, { color: colors.textSecondary }]}>
                   {selectedItems.length === 0
                     ? "Nothing scheduled"
+                    : selectedOverdue.length > 0
+                    ? `${selectedItems.length} task${selectedItems.length > 1 ? "s" : ""} · ${selectedOverdue.length} overdue · ${selectedDone.length} done`
                     : `${selectedItems.length} task${selectedItems.length > 1 ? "s" : ""} · ${selectedDone.length} done`}
                 </Text>
               </View>
@@ -259,11 +272,20 @@ export default function Calendar() {
                 </View>
               ) : (
                 <>
+                  {/* Overdue */}
+                  {selectedOverdue.length > 0 && (
+                    <>
+                      <Text style={[s.modalSectionLbl, { color: "#E24B4A" }]}>⚠️ Overdue</Text>
+                      {selectedOverdue.map(item => (
+                        <ModalItem key={item._id} item={item} overdue themeColors={colors} />
+                      ))}
+                    </>
+                  )}
                   {/* Pending */}
-                  {selectedPending.length > 0 && (
+                  {selectedPending.filter(i => !isPastDateTime(i.date, i.startTime)).length > 0 && (
                     <>
                       <Text style={[s.modalSectionLbl, { color: colors.textSecondary }]}>Pending</Text>
-                      {selectedPending.map(item => (
+                      {selectedPending.filter(i => !isPastDateTime(i.date, i.startTime)).map(item => (
                         <ModalItem key={item._id} item={item} themeColors={colors} />
                       ))}
                     </>
@@ -288,19 +310,19 @@ export default function Calendar() {
   );
 }
 
-function ModalItem({ item, done, themeColors }: { item: ScheduleItem; done?: boolean; themeColors: any }) {
+function ModalItem({ item, done, overdue, themeColors }: { item: ScheduleItem; done?: boolean; overdue?: boolean; themeColors: any }) {
   return (
-    <View style={[ms.row, { backgroundColor: themeColors.card, borderColor: themeColors.cardBorder }, done && ms.rowDone]}>
-      <View style={[ms.dot, { backgroundColor: getTypeColor(item.type) }]} />
+    <View style={[ms.row, { backgroundColor: themeColors.card, borderColor: overdue ? "#E24B4A" : themeColors.cardBorder }, done && ms.rowDone, overdue && ms.rowOverdue]}>
+      <View style={[ms.dot, { backgroundColor: overdue ? "#E24B4A" : getTypeColor(item.type) }]} />
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <Text style={[ms.title, { color: themeColors.textPrimary }]} numberOfLines={1}>{item.title}</Text>
-          <View style={[ms.pill, { backgroundColor: getTypeBg(item.type) }]}>
-            <Text style={[ms.pillTxt, { color: getTypeColor(item.type) }]}>{item.type}</Text>
+          <Text style={[ms.title, { color: overdue ? "#E24B4A" : themeColors.textPrimary }]} numberOfLines={1}>{item.title}</Text>
+          <View style={[ms.pill, { backgroundColor: overdue ? "#FCEBEB" : getTypeBg(item.type) }]}>
+            <Text style={[ms.pillTxt, { color: overdue ? "#E24B4A" : getTypeColor(item.type) }]}>{item.type}</Text>
           </View>
-          {item.isUrgent && !done && (
-            <View style={ms.urgentPill}>
-              <Text style={ms.urgentTxt}>Urgent</Text>
+          {(item.isUrgent || overdue) && !done && (
+            <View style={[ms.urgentPill, { backgroundColor: overdue ? "#FCEBEB" : "#FCEBEB" }]}>
+              <Text style={[ms.urgentTxt, { color: overdue ? "#E24B4A" : "#791F1F" }]}>{overdue ? "Overdue" : "Urgent"}</Text>
             </View>
           )}
         </View>
@@ -308,7 +330,7 @@ function ModalItem({ item, done, themeColors }: { item: ScheduleItem; done?: boo
           <Text style={[ms.sub, { color: themeColors.textSecondary }]} numberOfLines={1}>{item.description}</Text>
         ) : null}
       </View>
-      <Text style={[ms.time, { color: themeColors.textSecondary }]}>{item.startTime}</Text>
+      <Text style={[ms.time, { color: overdue ? "#E24B4A" : themeColors.textSecondary }]}>{item.startTime}</Text>
       {done && <Ionicons name="checkmark-circle" size={18} color="#639922" style={{ marginLeft: 4 }} />}
     </View>
   );
@@ -317,6 +339,7 @@ function ModalItem({ item, done, themeColors }: { item: ScheduleItem; done?: boo
 const ms = StyleSheet.create({
   row:       { borderWidth: 0.5, borderRadius: 11, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
   rowDone:   { opacity: 0.55 },
+  rowOverdue:{ borderWidth: 1.5 },
   dot:       { width: 9, height: 9, borderRadius: 5, flexShrink: 0 },
   title:     { fontSize: 14, fontWeight: "500", flexShrink: 1 },
   sub:       { fontSize: 11, marginTop: 2 },

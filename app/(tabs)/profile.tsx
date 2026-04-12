@@ -70,7 +70,7 @@ export default function Profile() {
     }
   };
 
-  const initials = profile.name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
+  const initials = (profile.name || "").split(" ").filter(w => w).map(w => w[0]).slice(0, 2).join("").toUpperCase();
   const c = colors;
 
   return (
@@ -189,15 +189,6 @@ export default function Profile() {
         </View>
       </View>
 
-      {/* SIGN OUT placeholder */}
-      <TouchableOpacity
-        style={[s.signOutBtn, { borderColor: "#E24B4A" }]}
-        onPress={() => Alert.alert("Sign out", "Sign out feature coming soon.")}
-      >
-        <Ionicons name="log-out-outline" size={18} color="#E24B4A" />
-        <Text style={s.signOutTxt}>Sign out</Text>
-      </TouchableOpacity>
-
       <View style={{ height: 50 }} />
     </ScrollView>
   );
@@ -234,6 +225,4 @@ const s = StyleSheet.create({
   statsRow:        { flexDirection: "row", gap: 10, marginTop: 12 },
   statCard:        { flex: 1, borderWidth: 0.5, borderRadius: 12, padding: 12, alignItems: "center", gap: 6 },
   statLbl:         { fontSize: 11 },
-  signOutBtn:      { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderRadius: 12, padding: 14, marginTop: 4 },
-  signOutTxt:      { color: "#E24B4A", fontSize: 14, fontWeight: "500" },
 });

@@ -7,8 +7,8 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Notifications from "expo-notifications";
 import { registerForPushNotifications, scheduleActivityNotification, cancelNotification } from "../../services/NotificationService";
 import { API_URL } from "../../constants/apiUrl";
-import { TYPES, ScheduleType, TYPE_COLORS } from "../../constants/scheduleTypes";
-import { toTimeString, toDateString, buildDateTime } from "../../utils/dateUtils";
+import { TYPES, ScheduleType, TYPE_COLORS, TYPE_BG } from "../../constants/scheduleTypes";
+import { toTimeString, toDateString, buildDateTime, isPastDateTime } from "../../utils/dateUtils";
 import { ScheduleCard } from "../../components/ScheduleCard";
 import { useTheme } from "../../context/ThemeContext";
 
@@ -47,6 +47,10 @@ export default function Home() {
   const [editingItem, setEditingItem] = useState<ScheduleItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [notifGranted, setNotifGranted] = useState(false);
+  const [detailItem, setDetailItem] = useState<ScheduleItem | null>(null);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [overviewCategory, setOverviewCategory] = useState<"total" | "done" | "pending" | "overdue" | null>(null);
+  const [overviewModalVisible, setOverviewModalVisible] = useState(false);
 
   // Form state
   const [title, setTitle] = useState("");
@@ -67,6 +71,8 @@ export default function Home() {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   const nextItem = items.find(i => !i.isCompleted);
   const urgentItems = items.filter(i => i.isUrgent && !i.isCompleted);
+  const overdue = items.filter(i => !i.isCompleted && isPastDateTime(i.date, i.startTime)).length;
+  const pending = items.filter(i => !i.isCompleted && !isPastDateTime(i.date, i.startTime)).length;
 
   // ─── INIT NOTIFICATIONS ──────────────────────────────────────────────
   useFocusEffect(useCallback(() => {
@@ -238,9 +244,13 @@ export default function Home() {
     setDescription(item.description || "");
     setIsUrgent(item.isUrgent || false);
     // Parse existing date/time back into Date objects
-    const [y, m, d] = item.date.split("-").map(Number);
-    setSelectedDate(new Date(y, m - 1, d));
-    setSelectedTime(buildDateTime(item.date, item.startTime));
+    if (item.date) {
+      const [y, m, d] = item.date.split("-").map(Number);
+      setSelectedDate(new Date(y, m - 1, d));
+    }
+    if (item.date && item.startTime) {
+      setSelectedTime(buildDateTime(item.date, item.startTime));
+    }
     setModalVisible(true);
   };
 
@@ -250,6 +260,18 @@ export default function Home() {
     setShowDatePicker(false);
     setShowTimePicker(false);
     resetForm();
+  };
+
+  // ─── CLOSE DETAIL MODAL ──────────────────────────────────────────────
+  const closeDetailModal = () => {
+    setDetailModalVisible(false);
+    setTimeout(() => setDetailItem(null), 300);
+  };
+
+  // ─── CLOSE OVERVIEW MODAL ────────────────────────────────────────────
+  const closeOverviewModal = () => {
+    setOverviewModalVisible(false);
+    setTimeout(() => setOverviewCategory(null), 300);
   };
 
   // ─── RENDER ──────────────────────────────────────────────────────────
@@ -279,7 +301,7 @@ export default function Home() {
             <Image source={{ uri: profile.avatar }} style={[baseStyles.avatar, { borderColor: colors.primaryLight }]} />
           ) : (
             <View style={[baseStyles.avatar, { backgroundColor: colors.primaryLight, borderColor: colors.primaryLight }]}>
-              <Text style={[baseStyles.avatarTxt, { color: colors.primary }]}>{profile.name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()}</Text>
+              <Text style={[baseStyles.avatarTxt, { color: colors.primary }]}>{(profile.name || "").split(" ").filter(w => w).map(w => w[0]).slice(0, 2).join("").toUpperCase()}</Text>
             </View>
           )}
         </View>
@@ -287,11 +309,19 @@ export default function Home() {
         {/* OVERVIEW */}
         <Text style={[baseStyles.sec, { color: colors.textSecondary }]}>Today's overview</Text>
         <View style={baseStyles.ovRow}>
-          {([["Total", total, colors.primary], ["Done", done, "#639922"], ["Pending", total - done, "#BA7517"]] as const).map(([l, n, c]) => (
-            <View key={l} style={[baseStyles.ovCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          {([["Total", total, colors.primary, "total"], ["Done", done, "#639922", "done"], ["Pending", pending, "#BA7517", "pending"], ["Overdue", overdue, "#E24B4A", "overdue"]] as const).map(([l, n, c, cat]) => (
+            <TouchableOpacity 
+              key={l} 
+              style={[baseStyles.ovCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
+              onPress={() => {
+                setOverviewCategory(cat);
+                setOverviewModalVisible(true);
+              }}
+              activeOpacity={0.7}
+            >
               <Text style={[baseStyles.ovNum, { color: c }]}>{n}</Text>
               <Text style={[baseStyles.ovLbl, { color: colors.textSecondary }]}>{l}</Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
         <View style={baseStyles.progMeta}>
@@ -350,13 +380,27 @@ export default function Home() {
         ) : (
           <View key={`scheduleList-${items.length}`}>
             {items.map((item, idx) => (
-              <ScheduleCard
+              <TouchableOpacity
                 key={`${item._id}-${idx}`}
-                item={item}
-                onEdit={() => openEdit(item)}
-                onDelete={() => handleDelete(item)}
-                onToggleComplete={() => toggleComplete(item)}
-              />
+                onPress={() => {
+                  setDetailItem(item);
+                  setDetailModalVisible(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <ScheduleCard
+                  item={item}
+                  isOverdue={!item.isCompleted && isPastDateTime(item.date, item.startTime)}
+                  onEdit={() => {
+                    if (item.isCompleted || (!item.isCompleted && isPastDateTime(item.date, item.startTime))) {
+                      return;
+                    }
+                    openEdit(item);
+                  }}
+                  onDelete={() => handleDelete(item)}
+                  onToggleComplete={() => toggleComplete(item)}
+                />
+              </TouchableOpacity>
             ))}
           </View>
         )}
@@ -519,6 +563,249 @@ export default function Home() {
           </View>
         </View>
       </Modal>
+
+      {/* ─── DETAIL MODAL ─── */}
+      <Modal visible={detailModalVisible} animationType="slide" transparent onRequestClose={closeDetailModal}>
+        <View style={[baseStyles.overlay, { backgroundColor: "rgba(0,0,0,0.35)" }]}>
+          <View style={[baseStyles.sheet, { backgroundColor: colors.background }]}>
+            <View style={baseStyles.sheetHeader}>
+              <Text style={[baseStyles.sheetTitle, { color: colors.textPrimary }]}>Schedule Details</Text>
+              <TouchableOpacity onPress={closeDetailModal}>
+                <Ionicons name="close" size={22} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {detailItem && (
+                <>
+                  {/* TITLE & TYPE */}
+                  <View style={{ marginBottom: 20 }}>
+                    <Text style={[baseStyles.detailTitle, { color: colors.textPrimary }]}>{detailItem.title}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8 }}>
+                      <View style={[baseStyles.typePillDetail, { backgroundColor: TYPE_BG[detailItem.type] }]}>
+                        <Text style={[baseStyles.typePillTxtDetail, { color: TYPE_COLORS[detailItem.type] }]}>
+                          {detailItem.type}
+                        </Text>
+                      </View>
+                      {detailItem.isUrgent && (
+                        <View style={[baseStyles.urgentBadge, { backgroundColor: "rgba(226, 75, 74, 0.1)" }]}>
+                          <Text style={baseStyles.urgentBadgeTxt}>⚠️ Urgent</Text>
+                        </View>
+                      )}
+                      {detailItem.isCompleted && isPastDateTime(detailItem.date, detailItem.startTime) && (
+                        <View style={[baseStyles.urgentBadge, { backgroundColor: "rgba(255, 152, 0, 0.1)" }]}>
+                          <Text style={[baseStyles.urgentBadgeTxt, { color: "#FF9800" }]}>⏱️ Done Late</Text>
+                        </View>
+                      )}
+                      {detailItem.isCompleted && !isPastDateTime(detailItem.date, detailItem.startTime) && (
+                        <View style={[baseStyles.urgentBadge, { backgroundColor: "rgba(99, 153, 34, 0.1)" }]}>
+                          <Text style={[baseStyles.urgentBadgeTxt, { color: "#639922" }]}>✓ Completed</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* DATE & TIME */}
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={[baseStyles.fieldLbl, { color: colors.textSecondary }]}>Date & Time</Text>
+                    <View style={[baseStyles.detailRow, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+                      <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[baseStyles.detailRowLabel, { color: colors.textSecondary }]}>Date</Text>
+                        <Text style={[baseStyles.detailRowValue, { color: colors.textPrimary }]}>
+                          {detailItem.date ? new Date(detailItem.date + "T00:00:00").toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" }) : "N/A"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={[baseStyles.detailRow, { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 10 }]}>
+                      <Ionicons name="time-outline" size={18} color={colors.primary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[baseStyles.detailRowLabel, { color: colors.textSecondary }]}>Start Time</Text>
+                        <Text style={[baseStyles.detailRowValue, { color: colors.textPrimary }]}>{detailItem.startTime}</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* DESCRIPTION */}
+                  {detailItem.description && (
+                    <View style={{ marginBottom: 16 }}>
+                      <Text style={[baseStyles.fieldLbl, { color: colors.textSecondary }]}>Notes & Description</Text>
+                      <View style={[baseStyles.detailDesc, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+                        <Text style={[baseStyles.detailDescTxt, { color: colors.textPrimary }]}>{detailItem.description}</Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* STATUS INFO */}
+                  <View style={{ marginBottom: 20 }}>
+                    <Text style={[baseStyles.fieldLbl, { color: colors.textSecondary }]}>Status</Text>
+                    {detailItem.isCompleted && isPastDateTime(detailItem.date, detailItem.startTime) ? (
+                      <View style={[baseStyles.detailRow, { backgroundColor: "rgba(255, 152, 0, 0.1)", borderColor: "#FF9800" }]}>
+                        <Ionicons name="alert-circle" size={18} color="#FF9800" />
+                        <Text style={[baseStyles.detailRowValue, { color: "#FF9800" }]}>Done Late</Text>
+                      </View>
+                    ) : (
+                      <View style={[baseStyles.detailRow, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+                        <Ionicons name={detailItem.isCompleted ? "checkmark-circle" : "time-outline"} size={18} color={detailItem.isCompleted ? "#639922" : colors.primary} />
+                        <Text style={[baseStyles.detailRowValue, { color: detailItem.isCompleted ? "#639922" : colors.textPrimary }]}>
+                          {detailItem.isCompleted ? "Completed" : "Pending"}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* OVERDUE WARNING */}
+                  {!detailItem.isCompleted && isPastDateTime(detailItem.date, detailItem.startTime) && (
+                    <View style={[baseStyles.overdueWarning, { backgroundColor: "rgba(226, 75, 74, 0.1)", borderColor: "#E24B4A" }]}>
+                      <Ionicons name="warning-outline" size={16} color="#E24B4A" />
+                      <Text style={[baseStyles.overdueWarningTxt, { color: "#E24B4A" }]}>This task is overdue and cannot be edited</Text>
+                    </View>
+                  )}
+
+                  {/* COMPLETED WARNING */}
+                  {detailItem.isCompleted && (
+                    <View style={[baseStyles.overdueWarning, { backgroundColor: "rgba(99, 153, 34, 0.1)", borderColor: "#639922" }]}>
+                      <Ionicons name="checkmark-circle" size={16} color="#639922" />
+                      <Text style={[baseStyles.overdueWarningTxt, { color: "#639922" }]}>This task is completed and cannot be edited</Text>
+                    </View>
+                  )}
+
+                  {/* ACTIONS */}
+                  <View style={{ flexDirection: "row", gap: 10, marginBottom: 20 }}>
+                    <TouchableOpacity
+                      style={[
+                        baseStyles.actionBtnDetail,
+                        {
+                          backgroundColor: detailItem.isCompleted || (!detailItem.isCompleted && isPastDateTime(detailItem.date, detailItem.startTime)) ? "#ccc" : colors.primary,
+                          flex: 1,
+                        },
+                      ]}
+                      onPress={() => {
+                        if (detailItem.isCompleted || (!detailItem.isCompleted && isPastDateTime(detailItem.date, detailItem.startTime))) return;
+                        closeDetailModal();
+                        setTimeout(() => openEdit(detailItem), 300);
+                      }}
+                      disabled={detailItem.isCompleted || (!detailItem.isCompleted && isPastDateTime(detailItem.date, detailItem.startTime))}
+                    >
+                      <Ionicons name="pencil-outline" size={18} color={detailItem.isCompleted || (!detailItem.isCompleted && isPastDateTime(detailItem.date, detailItem.startTime)) ? "#999" : "#fff"} />
+                      <Text style={[baseStyles.actionBtnDetailTxt, (detailItem.isCompleted || (!detailItem.isCompleted && isPastDateTime(detailItem.date, detailItem.startTime))) && { color: "#999" }]}>Edit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[baseStyles.actionBtnDetail, { backgroundColor: colors.card, borderColor: colors.primary, borderWidth: 1 }]}
+                      onPress={() => {
+                        closeDetailModal();
+                        setTimeout(() => toggleComplete(detailItem), 300);
+                      }}
+                    >
+                      <Ionicons name={detailItem.isCompleted ? "close-circle" : "checkmark-circle"} size={18} color={colors.primary} />
+                      <Text style={[baseStyles.actionBtnDetailTxt, { color: colors.primary }]}>
+                        {detailItem.isCompleted ? "Undo" : "Done"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity
+                    style={baseStyles.delDetailBtn}
+                    onPress={() => {
+                      closeDetailModal();
+                      setTimeout(() => handleDelete(detailItem), 300);
+                    }}
+                  >
+                    <Ionicons name="trash-outline" size={15} color="#E24B4A" />
+                    <Text style={baseStyles.delDetailTxt}>Delete schedule</Text>
+                  </TouchableOpacity>
+
+                  <View style={{ height: 30 }} />
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── OVERVIEW MODAL ─── */}
+      <Modal visible={overviewModalVisible} animationType="slide" transparent onRequestClose={closeOverviewModal}>
+        <View style={[baseStyles.overlay, { backgroundColor: "rgba(0,0,0,0.35)" }]}>
+          <View style={[baseStyles.sheet, { backgroundColor: colors.background }]}>
+            <View style={baseStyles.sheetHeader}>
+              <Text style={[baseStyles.sheetTitle, { color: colors.textPrimary }]}>
+                {overviewCategory === "total" && "All Schedules"}
+                {overviewCategory === "done" && "Completed Tasks"}
+                {overviewCategory === "pending" && "Pending Tasks"}
+                {overviewCategory === "overdue" && "Overdue Tasks"}
+              </Text>
+              <TouchableOpacity onPress={closeOverviewModal}>
+                <Ionicons name="close" size={22} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {(() => {
+                let filteredItems: ScheduleItem[] = [];
+                
+                if (overviewCategory === "total") {
+                  filteredItems = items;
+                } else if (overviewCategory === "done") {
+                  filteredItems = items.filter(i => i.isCompleted);
+                } else if (overviewCategory === "pending") {
+                  filteredItems = items.filter(i => !i.isCompleted && !isPastDateTime(i.date, i.startTime));
+                } else if (overviewCategory === "overdue") {
+                  filteredItems = items.filter(i => !i.isCompleted && isPastDateTime(i.date, i.startTime));
+                }
+
+                return filteredItems.length === 0 ? (
+                  <View style={baseStyles.empty}>
+                    <Ionicons name={overviewCategory === "done" ? "checkmark-circle-outline" : overviewCategory === "overdue" ? "warning-outline" : "list-outline"} size={40} color={colors.primaryDark} />
+                    <Text style={[baseStyles.emptyTxt, { color: colors.textSecondary }]}>
+                      {overviewCategory === "total" && "No schedules yet"}
+                      {overviewCategory === "done" && "No completed tasks yet"}
+                      {overviewCategory === "pending" && "No pending tasks"}
+                      {overviewCategory === "overdue" && "No overdue tasks"}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={{ gap: 8 }}>
+                    {filteredItems.map((item, idx) => (
+                      <TouchableOpacity
+                        key={`${item._id}-${idx}`}
+                        onPress={() => {
+                          closeOverviewModal();
+                          setTimeout(() => {
+                            setDetailItem(item);
+                            setDetailModalVisible(true);
+                          }, 300);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <ScheduleCard
+                          item={item}
+                          isOverdue={overviewCategory === "overdue" && !item.isCompleted && isPastDateTime(item.date, item.startTime)}
+                          onEdit={() => {
+                            // Disable edit for completed items and overdue incomplete items
+                            if (item.isCompleted || (!item.isCompleted && isPastDateTime(item.date, item.startTime))) {
+                              return;
+                            }
+                            closeOverviewModal();
+                            setTimeout(() => openEdit(item), 300);
+                          }}
+                          onDelete={() => {
+                            closeOverviewModal();
+                            setTimeout(() => handleDelete(item), 300);
+                          }}
+                          onToggleComplete={() => {
+                            toggleComplete(item);
+                          }}
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                );
+              })()}
+              <View style={{ height: 30 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -577,4 +864,21 @@ const baseStyles = StyleSheet.create({
   submitTxt:    { color: "#fff", fontSize: 15, fontWeight: "500" },
   delModalBtn:  { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, padding: 10 },
   delModalTxt:  { color: "#E24B4A", fontSize: 13 },
+  // Detail Modal Styles
+  detailTitle:  { fontSize: 20, fontWeight: "600", marginBottom: 4 },
+  typePillDetail: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  typePillTxtDetail: { fontSize: 12, fontWeight: "500" },
+  urgentBadge:  { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  urgentBadgeTxt: { fontSize: 12, fontWeight: "500", color: "#E24B4A" },
+  detailRow:    { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 0.5, borderRadius: 10, padding: 12 },
+  detailRowLabel: { fontSize: 11, fontWeight: "500" },
+  detailRowValue: { fontSize: 14, fontWeight: "500", marginTop: 2 },
+  detailDesc:   { borderWidth: 0.5, borderRadius: 10, padding: 12 },
+  detailDescTxt: { fontSize: 14, lineHeight: 20 },
+  actionBtnDetail: { borderRadius: 10, padding: 12, alignItems: "center", gap: 6, flexDirection: "row", justifyContent: "center" },
+  actionBtnDetailTxt: { fontSize: 13, fontWeight: "500", color: "#fff" },
+  delDetailBtn:  { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, padding: 12, borderTopWidth: 0.5, borderTopColor: "#ddd", paddingTop: 14 },
+  delDetailTxt:  { color: "#E24B4A", fontSize: 13, fontWeight: "500" },
+  overdueWarning: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 16 },
+  overdueWarningTxt: { fontSize: 13, fontWeight: "500", flex: 1 },
 });

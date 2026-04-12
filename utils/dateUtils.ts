@@ -7,12 +7,14 @@ export const toDateString = (d: Date) =>
   d.toISOString().split("T")[0];
 
 export const formatDate = (dateStr: string) => {
+  if (!dateStr) return "";
   const [y, m, d] = dateStr.split("-").map(Number);
   const dt = new Date(y, m - 1, d);
   return dt.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
 };
 
 export const buildDateTime = (dateStr: string, timeStr: string): Date => {
+  if (!dateStr || !timeStr) return new Date();
   const [year, month, day] = dateStr.split("-").map(Number);
   const cleaned = timeStr.replace(/\./g, ":").trim();
   const match = cleaned.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
@@ -26,6 +28,7 @@ export const buildDateTime = (dateStr: string, timeStr: string): Date => {
 };
 
 export const isPastDateTime = (dateStr: string, timeStr: string) => {
+  if (!dateStr || !timeStr) return false;
   const [y, m, d] = dateStr.split("-").map(Number);
   const cleaned = timeStr.replace(/\./g, ":").trim();
   const match = cleaned.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
