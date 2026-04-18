@@ -11,16 +11,15 @@ import { TYPES, ScheduleType, TYPE_COLORS, TYPE_BG } from "../../constants/sched
 import { toTimeString, toDateString, buildDateTime, isPastDateTime } from "../../utils/dateUtils";
 import { ScheduleCard } from "../../components/ScheduleCard";
 import { useTheme } from "../../context/ThemeContext";
+import { ScheduleDetailModal } from "../../components/ScheduleDetailModal";
+
 
 type ScheduleItem = {
-  _id: string;
-  title: string;
-  type: ScheduleType;
-  date: string;
-  startTime: string;
-  description?: string;
-  isCompleted: boolean;
-  isUrgent?: boolean;
+  _id: string; title: string; type: ScheduleType;
+  date: string; startTime: string;
+  description?: string; isCompleted: boolean;
+  isUrgent?: boolean; courseId?: string | null;
+  reminderMinutesBefore?: number;   // ← add this
 };
 
 type ProfileData = {
@@ -36,8 +35,20 @@ const DEFAULT_PROFILE: ProfileData = {
   name: "Maria Santos", course: "BS Nursing",
   year: "3rd Year", section: "Section A", school: "", avatar: null,
 };
+const REMIND_OPTIONS = [
+  { label: "At start time",  value: 0   },
+  { label: "5 min before",   value: 5   },
+  { label: "15 min before",  value: 15  },
+  { label: "30 min before",  value: 30  },
+  { label: "1 hour before",  value: 60  },
+  { label: "2 hours before", value: 120 },
+  { label: "1 day before",   value: 1440},
+];
+
+
 
 export default function Home() {
+  const [remindMinutes, setRemindMinutes] = useState<number>(15);
   const { colors, scheme } = useTheme();
   const [items, setItems] = useState<ScheduleItem[]>([]);
   const [profile, setProfile] = useState<ProfileData>(DEFAULT_PROFILE);
@@ -47,10 +58,17 @@ export default function Home() {
   const [editingItem, setEditingItem] = useState<ScheduleItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [notifGranted, setNotifGranted] = useState(false);
-  const [detailItem, setDetailItem] = useState<ScheduleItem | null>(null);
-  const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [overviewCategory, setOverviewCategory] = useState<"total" | "done" | "pending" | "overdue" | null>(null);
   const [overviewModalVisible, setOverviewModalVisible] = useState(false);
+  const [courses, setCourses] = useState<{_id: string; name: string; color: string; code: string}[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [detailItem, setDetailItem] = useState<ScheduleItem | null>(null);
+const [detailVisible, setDetailVisible] = useState(false);
+
+const openDetail = (item: ScheduleItem) => {
+  setDetailItem(item);
+  setDetailVisible(true);
+};
 
   // Form state
   const [title, setTitle] = useState("");
@@ -78,6 +96,7 @@ export default function Home() {
   useFocusEffect(useCallback(() => {
     registerForPushNotifications().then(setNotifGranted);
     fetchSchedules();
+    fetchCourses();
     AsyncStorage.getItem("profileData").then(v => {
       if (v) { const p = JSON.parse(v); setProfile(p); }
     });
@@ -87,20 +106,40 @@ export default function Home() {
   }, []));
 
   // ─── FETCH ───────────────────────────────────────────────────────────
-  const fetchSchedules = async () => {
+const fetchSchedules = async () => {
+  try {
+    // Recompute today every time we fetch — avoids stale date
+    const todayFresh = toDateString(new Date());
+    const res = await fetch(`${API_URL}/schedules/${todayFresh}`);
+
+    if (!res.ok) {
+      console.warn("Schedule fetch failed:", res.status);
+      setItems([]);
+      return;
+    }
+
+    const data = await res.json();
+    const safe = Array.isArray(data) ? data : [];
+    safe.sort((a: ScheduleItem, b: ScheduleItem) =>
+      (a.startTime ?? "").localeCompare(b.startTime ?? "")
+    );
+    setItems(safe);
+  } catch (e) {
+    console.warn("fetchSchedules error:", e);
+    // Don't show an alert — just leave list empty so user can refresh
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+};
+
+  const fetchCourses = async () => {
     try {
-      const res = await fetch(`${API_URL}/schedules/${today}`);
+      const res = await fetch(`${API_URL}/courses`);
       const data = await res.json();
-      const safe = Array.isArray(data) ? data : [];
-      safe.sort((a: ScheduleItem, b: ScheduleItem) =>
-        (a.startTime ?? "").localeCompare(b.startTime ?? "")
-      );
-      setItems(safe);
+      setCourses(Array.isArray(data) ? data : []);
     } catch {
-      Alert.alert("Error", "Could not load schedules. Check your connection.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+      /* silent */
     }
   };
 
@@ -108,6 +147,8 @@ export default function Home() {
 
   // ─── RESET FORM ──────────────────────────────────────────────────────
   const resetForm = () => {
+    setRemindMinutes(15);
+    setSelectedCourseId(null);
     setTitle(""); setSelectedType("Class"); setDescription("");
     setIsUrgent(false);
     setSelectedDate(new Date()); setSelectedTime(new Date());
@@ -128,6 +169,7 @@ export default function Home() {
           date: dateStr, startTime: timeStr,
           description: description.trim(),
           isUrgent, isCompleted: false,
+          courseId: selectedCourseId,
         }),
       });
       const newItem: ScheduleItem = await res.json();
@@ -138,17 +180,16 @@ export default function Home() {
       );
       // Schedule notification
       if (notifGranted) {
-          const dt = buildDateTime(dateStr, timeStr);
-          await scheduleActivityNotification(
-            newItem._id,
-            newItem.title,
-            newItem.type,           // ← new
-            newItem.description ?? "",
-            dt,
-            newItem.isUrgent ?? false,  // ← new
-            scheme                  // ← new
-          );
-        }
+  const dt = buildDateTime(dateStr, timeStr);
+  // Shift trigger by remind offset
+  const triggerDt = new Date(dt.getTime() - remindMinutes * 60 * 1000);
+  const effectiveDt = triggerDt > new Date() ? triggerDt : dt;
+  await scheduleActivityNotification(
+    newItem._id, newItem.title, newItem.type,
+    newItem.description ?? "", effectiveDt,
+    newItem.isUrgent ?? false, scheme
+  );
+}
       closeModal();
     } catch {
       Alert.alert("Error", "Could not save schedule.");
@@ -172,6 +213,7 @@ export default function Home() {
           title: title.trim(), type: selectedType,
           date: dateStr, startTime: timeStr,
           description: description.trim(), isUrgent,
+          courseId: selectedCourseId,
         }),
       });
       const updated: ScheduleItem = await res.json();
@@ -194,7 +236,71 @@ export default function Home() {
       closeModal();
     } catch {
       Alert.alert("Error", "Could not update schedule.");
-    } finally {
+    } finally {const handleCreate = async () => {
+  if (!title.trim()) {
+    Alert.alert("Missing field", "Please enter a title.");
+    return;
+  }
+
+  setSaving(true);
+
+  const timeStr = toTimeString(selectedTime);
+  const dateStr = toDateString(selectedDate);
+
+  try {
+    const res = await fetch(`${API_URL}/schedules`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: title.trim(),
+        type: selectedType,
+        date: dateStr,
+        startTime: timeStr,
+        description: description.trim(),
+        isUrgent,
+        isCompleted: false,
+        courseId: selectedCourseId,
+      }),
+    });
+
+    const data = await res.json();
+    console.log("CREATE RESPONSE:", data);
+
+    // 🚨 GUARD
+    if (!data || !data._id) {
+      throw new Error("Invalid schedule returned from server");
+    }
+
+    setItems(prev =>
+      [...prev, data].sort((a, b) =>
+        (a.startTime ?? "").localeCompare(b.startTime ?? "")
+      )
+    );
+
+    if (notifGranted) {
+      const dt = buildDateTime(dateStr, timeStr);
+      const triggerDt = new Date(dt.getTime() - remindMinutes * 60 * 1000);
+      const effectiveDt = triggerDt > new Date() ? triggerDt : dt;
+
+      await scheduleActivityNotification(
+        data._id,
+        data.title,
+        data.type,
+        data.description ?? "",
+        effectiveDt,
+        data.isUrgent ?? false,
+        scheme
+      );
+    }
+
+    closeModal();
+  } catch (err) {
+    console.error(err);
+    Alert.alert("Error", "Could not save schedule.");
+  } finally {
+    setSaving(false);
+  }
+};
       setSaving(false);
     }
   };
@@ -238,11 +344,13 @@ export default function Home() {
   };
 
   const openEdit = (item: ScheduleItem) => {
+    setRemindMinutes(item.reminderMinutesBefore ?? 15);
     setEditingItem(item);
     setTitle(item.title);
     setSelectedType(item.type);
     setDescription(item.description || "");
     setIsUrgent(item.isUrgent || false);
+    setSelectedCourseId(item.courseId || null);
     // Parse existing date/time back into Date objects
     if (item.date) {
       const [y, m, d] = item.date.split("-").map(Number);
@@ -262,11 +370,6 @@ export default function Home() {
     resetForm();
   };
 
-  // ─── CLOSE DETAIL MODAL ──────────────────────────────────────────────
-  const closeDetailModal = () => {
-    setDetailModalVisible(false);
-    setTimeout(() => setDetailItem(null), 300);
-  };
 
   // ─── CLOSE OVERVIEW MODAL ────────────────────────────────────────────
   const closeOverviewModal = () => {
@@ -382,10 +485,7 @@ export default function Home() {
             {items.map((item, idx) => (
               <TouchableOpacity
                 key={`${item._id}-${idx}`}
-                onPress={() => {
-                  setDetailItem(item);
-                  setDetailModalVisible(true);
-                }}
+                onPress={() => openDetail(item)}
                 activeOpacity={0.7}
               >
                 <ScheduleCard
@@ -401,6 +501,7 @@ export default function Home() {
                   onToggleComplete={() => toggleComplete(item)}
                 />
               </TouchableOpacity>
+              
             ))}
           </View>
         )}
@@ -465,6 +566,40 @@ export default function Home() {
                 </View>
               </ScrollView>
 
+              {/* COURSE LINK */}
+              {courses.length > 0 && (
+                <>
+                  <Text style={[baseStyles.fieldLbl, { color: colors.textSecondary }]}>Link to course (optional)</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      <TouchableOpacity
+                        onPress={() => setSelectedCourseId(null)}
+                        style={[baseStyles.typeChip, {
+                          borderColor: !selectedCourseId ? colors.primary : colors.cardBorder,
+                          backgroundColor: !selectedCourseId ? colors.primaryLight : colors.card,
+                        }]}
+                      >
+                        <Text style={[baseStyles.typeChipTxt, { color: !selectedCourseId ? colors.primary : colors.textSecondary }]}>None</Text>
+                      </TouchableOpacity>
+                      {courses.map(c => (
+                        <TouchableOpacity
+                          key={c._id}
+                          onPress={() => setSelectedCourseId(c._id)}
+                          style={[baseStyles.typeChip, {
+                            borderColor: selectedCourseId === c._id ? c.color : colors.cardBorder,
+                            backgroundColor: selectedCourseId === c._id ? c.color + "22" : colors.card,
+                          }]}
+                        >
+                          <Text style={[baseStyles.typeChipTxt, { color: selectedCourseId === c._id ? c.color : colors.textSecondary }]}>
+                            {c.code || c.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </>
+              )}
+
               {/* DATE PICKER */}
               <Text style={[baseStyles.fieldLbl, { color: colors.textSecondary }]}>Date *</Text>
               <TouchableOpacity style={[baseStyles.pickerBtn, { backgroundColor: colors.card, borderColor: colors.cardBorder }]} onPress={() => setShowDatePicker(true)}>
@@ -508,7 +643,34 @@ export default function Home() {
                   }}
                 />
               )}
+              
 
+{/* WHEN TO REMIND */}
+<Text style={[baseStyles.fieldLbl, { color: colors.textSecondary }]}>When to remind</Text>
+<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+  <View style={{ flexDirection: "row", gap: 8 }}>
+    {REMIND_OPTIONS.map(opt => (
+      <TouchableOpacity
+        key={opt.value}
+        onPress={() => setRemindMinutes(opt.value)}
+        style={[
+          baseStyles.typeChip,
+          {
+            borderColor: remindMinutes === opt.value ? colors.primary : colors.cardBorder,
+            backgroundColor: remindMinutes === opt.value ? colors.primaryLight : colors.card,
+          },
+        ]}
+      >
+        <Text style={[
+          baseStyles.typeChipTxt,
+          { color: remindMinutes === opt.value ? colors.primary : colors.textSecondary },
+        ]}>
+          {opt.label}
+        </Text>
+      </TouchableOpacity>
+    ))}
+  </View>
+</ScrollView>
               {/* DESCRIPTION */}
               <Text style={[baseStyles.fieldLbl, { color: colors.textSecondary }]}>Description / notes</Text>
               <TextInput
@@ -564,164 +726,7 @@ export default function Home() {
         </View>
       </Modal>
 
-      {/* ─── DETAIL MODAL ─── */}
-      <Modal visible={detailModalVisible} animationType="slide" transparent onRequestClose={closeDetailModal}>
-        <View style={[baseStyles.overlay, { backgroundColor: "rgba(0,0,0,0.35)" }]}>
-          <View style={[baseStyles.sheet, { backgroundColor: colors.background }]}>
-            <View style={baseStyles.sheetHeader}>
-              <Text style={[baseStyles.sheetTitle, { color: colors.textPrimary }]}>Schedule Details</Text>
-              <TouchableOpacity onPress={closeDetailModal}>
-                <Ionicons name="close" size={22} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {detailItem && (
-                <>
-                  {/* TITLE & TYPE */}
-                  <View style={{ marginBottom: 20 }}>
-                    <Text style={[baseStyles.detailTitle, { color: colors.textPrimary }]}>{detailItem.title}</Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8 }}>
-                      <View style={[baseStyles.typePillDetail, { backgroundColor: TYPE_BG[detailItem.type] }]}>
-                        <Text style={[baseStyles.typePillTxtDetail, { color: TYPE_COLORS[detailItem.type] }]}>
-                          {detailItem.type}
-                        </Text>
-                      </View>
-                      {detailItem.isUrgent && (
-                        <View style={[baseStyles.urgentBadge, { backgroundColor: "rgba(226, 75, 74, 0.1)" }]}>
-                          <Text style={baseStyles.urgentBadgeTxt}>⚠️ Urgent</Text>
-                        </View>
-                      )}
-                      {detailItem.isCompleted && isPastDateTime(detailItem.date, detailItem.startTime) && (
-                        <View style={[baseStyles.urgentBadge, { backgroundColor: "rgba(255, 152, 0, 0.1)" }]}>
-                          <Text style={[baseStyles.urgentBadgeTxt, { color: "#FF9800" }]}>⏱️ Done Late</Text>
-                        </View>
-                      )}
-                      {detailItem.isCompleted && !isPastDateTime(detailItem.date, detailItem.startTime) && (
-                        <View style={[baseStyles.urgentBadge, { backgroundColor: "rgba(99, 153, 34, 0.1)" }]}>
-                          <Text style={[baseStyles.urgentBadgeTxt, { color: "#639922" }]}>✓ Completed</Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-
-                  {/* DATE & TIME */}
-                  <View style={{ marginBottom: 16 }}>
-                    <Text style={[baseStyles.fieldLbl, { color: colors.textSecondary }]}>Date & Time</Text>
-                    <View style={[baseStyles.detailRow, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-                      <Ionicons name="calendar-outline" size={18} color={colors.primary} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={[baseStyles.detailRowLabel, { color: colors.textSecondary }]}>Date</Text>
-                        <Text style={[baseStyles.detailRowValue, { color: colors.textPrimary }]}>
-                          {detailItem.date ? new Date(detailItem.date + "T00:00:00").toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" }) : "N/A"}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={[baseStyles.detailRow, { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 10 }]}>
-                      <Ionicons name="time-outline" size={18} color={colors.primary} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={[baseStyles.detailRowLabel, { color: colors.textSecondary }]}>Start Time</Text>
-                        <Text style={[baseStyles.detailRowValue, { color: colors.textPrimary }]}>{detailItem.startTime}</Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* DESCRIPTION */}
-                  {detailItem.description && (
-                    <View style={{ marginBottom: 16 }}>
-                      <Text style={[baseStyles.fieldLbl, { color: colors.textSecondary }]}>Notes & Description</Text>
-                      <View style={[baseStyles.detailDesc, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-                        <Text style={[baseStyles.detailDescTxt, { color: colors.textPrimary }]}>{detailItem.description}</Text>
-                      </View>
-                    </View>
-                  )}
-
-                  {/* STATUS INFO */}
-                  <View style={{ marginBottom: 20 }}>
-                    <Text style={[baseStyles.fieldLbl, { color: colors.textSecondary }]}>Status</Text>
-                    {detailItem.isCompleted && isPastDateTime(detailItem.date, detailItem.startTime) ? (
-                      <View style={[baseStyles.detailRow, { backgroundColor: "rgba(255, 152, 0, 0.1)", borderColor: "#FF9800" }]}>
-                        <Ionicons name="alert-circle" size={18} color="#FF9800" />
-                        <Text style={[baseStyles.detailRowValue, { color: "#FF9800" }]}>Done Late</Text>
-                      </View>
-                    ) : (
-                      <View style={[baseStyles.detailRow, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-                        <Ionicons name={detailItem.isCompleted ? "checkmark-circle" : "time-outline"} size={18} color={detailItem.isCompleted ? "#639922" : colors.primary} />
-                        <Text style={[baseStyles.detailRowValue, { color: detailItem.isCompleted ? "#639922" : colors.textPrimary }]}>
-                          {detailItem.isCompleted ? "Completed" : "Pending"}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-
-                  {/* OVERDUE WARNING */}
-                  {!detailItem.isCompleted && isPastDateTime(detailItem.date, detailItem.startTime) && (
-                    <View style={[baseStyles.overdueWarning, { backgroundColor: "rgba(226, 75, 74, 0.1)", borderColor: "#E24B4A" }]}>
-                      <Ionicons name="warning-outline" size={16} color="#E24B4A" />
-                      <Text style={[baseStyles.overdueWarningTxt, { color: "#E24B4A" }]}>This task is overdue and cannot be edited</Text>
-                    </View>
-                  )}
-
-                  {/* COMPLETED WARNING */}
-                  {detailItem.isCompleted && (
-                    <View style={[baseStyles.overdueWarning, { backgroundColor: "rgba(99, 153, 34, 0.1)", borderColor: "#639922" }]}>
-                      <Ionicons name="checkmark-circle" size={16} color="#639922" />
-                      <Text style={[baseStyles.overdueWarningTxt, { color: "#639922" }]}>This task is completed and cannot be edited</Text>
-                    </View>
-                  )}
-
-                  {/* ACTIONS */}
-                  <View style={{ flexDirection: "row", gap: 10, marginBottom: 20 }}>
-                    <TouchableOpacity
-                      style={[
-                        baseStyles.actionBtnDetail,
-                        {
-                          backgroundColor: detailItem.isCompleted || (!detailItem.isCompleted && isPastDateTime(detailItem.date, detailItem.startTime)) ? "#ccc" : colors.primary,
-                          flex: 1,
-                        },
-                      ]}
-                      onPress={() => {
-                        if (detailItem.isCompleted || (!detailItem.isCompleted && isPastDateTime(detailItem.date, detailItem.startTime))) return;
-                        closeDetailModal();
-                        setTimeout(() => openEdit(detailItem), 300);
-                      }}
-                      disabled={detailItem.isCompleted || (!detailItem.isCompleted && isPastDateTime(detailItem.date, detailItem.startTime))}
-                    >
-                      <Ionicons name="pencil-outline" size={18} color={detailItem.isCompleted || (!detailItem.isCompleted && isPastDateTime(detailItem.date, detailItem.startTime)) ? "#999" : "#fff"} />
-                      <Text style={[baseStyles.actionBtnDetailTxt, (detailItem.isCompleted || (!detailItem.isCompleted && isPastDateTime(detailItem.date, detailItem.startTime))) && { color: "#999" }]}>Edit</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[baseStyles.actionBtnDetail, { backgroundColor: colors.card, borderColor: colors.primary, borderWidth: 1 }]}
-                      onPress={() => {
-                        closeDetailModal();
-                        setTimeout(() => toggleComplete(detailItem), 300);
-                      }}
-                    >
-                      <Ionicons name={detailItem.isCompleted ? "close-circle" : "checkmark-circle"} size={18} color={colors.primary} />
-                      <Text style={[baseStyles.actionBtnDetailTxt, { color: colors.primary }]}>
-                        {detailItem.isCompleted ? "Undo" : "Done"}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <TouchableOpacity
-                    style={baseStyles.delDetailBtn}
-                    onPress={() => {
-                      closeDetailModal();
-                      setTimeout(() => handleDelete(detailItem), 300);
-                    }}
-                  >
-                    <Ionicons name="trash-outline" size={15} color="#E24B4A" />
-                    <Text style={baseStyles.delDetailTxt}>Delete schedule</Text>
-                  </TouchableOpacity>
-
-                  <View style={{ height: 30 }} />
-                </>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
 
       {/* ─── OVERVIEW MODAL ─── */}
       <Modal visible={overviewModalVisible} animationType="slide" transparent onRequestClose={closeOverviewModal}>
@@ -769,12 +774,9 @@ export default function Home() {
                       <TouchableOpacity
                         key={`${item._id}-${idx}`}
                         onPress={() => {
-                          closeOverviewModal();
-                          setTimeout(() => {
-                            setDetailItem(item);
-                            setDetailModalVisible(true);
-                          }, 300);
-                        }}
+  closeOverviewModal();
+  setTimeout(() => openDetail(item), 300);
+}}
                         activeOpacity={0.7}
                       >
                         <ScheduleCard
@@ -806,9 +808,20 @@ export default function Home() {
           </View>
         </View>
       </Modal>
+      <ScheduleDetailModal
+  item={detailItem}
+  visible={detailVisible}
+  onClose={() => setDetailVisible(false)}
+  colors={colors}
+  onEdit={openEdit}
+  onDelete={handleDelete}
+  onToggleComplete={toggleComplete}
+  readOnly={false}
+/>
     </>
   );
 }
+
 
 const baseStyles = StyleSheet.create({
   screen:       { flex: 1, padding: 16 },

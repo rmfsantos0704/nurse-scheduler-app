@@ -5,6 +5,7 @@ import { useFocusEffect } from "expo-router";
 import { API_URL } from "../../constants/apiUrl";
 import { formatDate, getTypeColor, getTypeBg, isPastDateTime } from "../../utils/dateUtils";
 import { useTheme } from "../../context/ThemeContext";
+import { ScheduleDetailModal } from "../../components/ScheduleDetailModal";
 
 type ScheduleItem = {
   _id: string;
@@ -35,7 +36,12 @@ export default function Calendar() {
   const [dayModalVisible, setDayModalVisible] = useState(false);
 
   const todayStr = today.toISOString().split("T")[0];
-
+  const [detailItem, setDetailItem] = useState<ScheduleItem | null>(null);
+  const [detailVisible, setDetailVisible] = useState(false);
+  const openDetail = (item: ScheduleItem) => {
+    setDetailItem(item);
+    setDetailVisible(true);
+  };
   useFocusEffect(useCallback(() => { fetchAll(); }, []));
 
   const fetchAll = async () => {
@@ -112,6 +118,13 @@ export default function Calendar() {
 
   return (
     <>
+      <ScheduleDetailModal
+      item={detailItem}
+     visible={detailVisible}
+  onClose={() => setDetailVisible(false)}
+  colors={colors}
+  readOnly={true}             // set true for Reminders and Courses (view-only)
+  />
       <ScrollView
         style={[s.screen, { backgroundColor: colors.background }]}
         showsVerticalScrollIndicator={false}
@@ -272,33 +285,29 @@ export default function Calendar() {
                 </View>
               ) : (
                 <>
-                  {/* Overdue */}
-                  {selectedOverdue.length > 0 && (
-                    <>
-                      <Text style={[s.modalSectionLbl, { color: "#E24B4A" }]}>⚠️ Overdue</Text>
-                      {selectedOverdue.map(item => (
-                        <ModalItem key={item._id} item={item} overdue themeColors={colors} />
-                      ))}
-                    </>
-                  )}
-                  {/* Pending */}
-                  {selectedPending.filter(i => !isPastDateTime(i.date, i.startTime)).length > 0 && (
-                    <>
-                      <Text style={[s.modalSectionLbl, { color: colors.textSecondary }]}>Pending</Text>
-                      {selectedPending.filter(i => !isPastDateTime(i.date, i.startTime)).map(item => (
-                        <ModalItem key={item._id} item={item} themeColors={colors} />
-                      ))}
-                    </>
-                  )}
-                  {/* Completed */}
-                  {selectedDone.length > 0 && (
-                    <>
-                      <Text style={[s.modalSectionLbl, { color: colors.textSecondary }]}>Completed</Text>
-                      {selectedDone.map(item => (
-                        <ModalItem key={item._id} item={item} done themeColors={colors} />
-                      ))}
-                    </>
-                  )}
+                 {/* Overdue */}
+{selectedOverdue.map(item => (
+  <ModalItem
+    key={item._id} item={item} overdue themeColors={colors}
+    onPress={() => openDetail(item)}
+  />
+))}
+
+{/* Pending */}
+{selectedPending.filter(i => !isPastDateTime(i.date, i.startTime)).map(item => (
+  <ModalItem
+    key={item._id} item={item} themeColors={colors}
+    onPress={() => openDetail(item)}
+  />
+))}
+
+{/* Completed */}
+{selectedDone.map(item => (
+  <ModalItem
+    key={item._id} item={item} done themeColors={colors}
+    onPress={() => openDetail(item)}
+  />
+))}
                 </>
               )}
               <View style={{ height: 20 }} />
@@ -310,19 +319,31 @@ export default function Calendar() {
   );
 }
 
-function ModalItem({ item, done, overdue, themeColors }: { item: ScheduleItem; done?: boolean; overdue?: boolean; themeColors: any }) {
+function ModalItem({ item, done, overdue, themeColors, onPress }: {
+  item: ScheduleItem; done?: boolean; overdue?: boolean;
+  themeColors: any; onPress?: () => void;
+}) {
   return (
-    <View style={[ms.row, { backgroundColor: themeColors.card, borderColor: overdue ? "#E24B4A" : themeColors.cardBorder }, done && ms.rowDone, overdue && ms.rowOverdue]}>
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={onPress ? 0.75 : 1}
+      style={[ms.row, {
+        backgroundColor: themeColors.card,
+        borderColor: overdue ? "#E24B4A" : themeColors.cardBorder,
+      }, done && ms.rowDone, overdue && ms.rowOverdue]}
+    >
       <View style={[ms.dot, { backgroundColor: overdue ? "#E24B4A" : getTypeColor(item.type) }]} />
       <View style={{ flex: 1 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <Text style={[ms.title, { color: overdue ? "#E24B4A" : themeColors.textPrimary }]} numberOfLines={1}>{item.title}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <Text style={[ms.title, { color: overdue ? "#E24B4A" : themeColors.textPrimary }]} numberOfLines={1}>
+            {item.title}
+          </Text>
           <View style={[ms.pill, { backgroundColor: overdue ? "#FCEBEB" : getTypeBg(item.type) }]}>
             <Text style={[ms.pillTxt, { color: overdue ? "#E24B4A" : getTypeColor(item.type) }]}>{item.type}</Text>
           </View>
           {(item.isUrgent || overdue) && !done && (
-            <View style={[ms.urgentPill, { backgroundColor: overdue ? "#FCEBEB" : "#FCEBEB" }]}>
-              <Text style={[ms.urgentTxt, { color: overdue ? "#E24B4A" : "#791F1F" }]}>{overdue ? "Overdue" : "Urgent"}</Text>
+            <View style={ms.urgentPill}>
+              <Text style={ms.urgentTxt}>{overdue ? "Overdue" : "Urgent"}</Text>
             </View>
           )}
         </View>
@@ -330,9 +351,14 @@ function ModalItem({ item, done, overdue, themeColors }: { item: ScheduleItem; d
           <Text style={[ms.sub, { color: themeColors.textSecondary }]} numberOfLines={1}>{item.description}</Text>
         ) : null}
       </View>
-      <Text style={[ms.time, { color: overdue ? "#E24B4A" : themeColors.textSecondary }]}>{item.startTime}</Text>
-      {done && <Ionicons name="checkmark-circle" size={18} color="#639922" style={{ marginLeft: 4 }} />}
-    </View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <Text style={[ms.time, { color: overdue ? "#E24B4A" : themeColors.textSecondary }]}>{item.startTime}</Text>
+        {done
+          ? <Ionicons name="checkmark-circle" size={18} color="#639922" />
+          : <Ionicons name="chevron-forward" size={14} color={themeColors.textSecondary} />
+        }
+      </View>
+    </TouchableOpacity>
   );
 }
 

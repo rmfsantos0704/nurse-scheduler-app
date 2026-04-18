@@ -52,8 +52,8 @@ export async function registerForPushNotifications(): Promise<boolean> {
 
   if (Platform.OS === "android") {
     // Default channel
-    await Notifications.setNotificationChannelAsync("nursesched_default", {
-      name: "NurseSched — General",
+    await Notifications.setNotificationChannelAsync("SnowEd_default", {
+      name: "SnowEd— General",
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: "#D4537E",
@@ -61,8 +61,8 @@ export async function registerForPushNotifications(): Promise<boolean> {
     });
 
     // Urgent channel
-    await Notifications.setNotificationChannelAsync("nursesched_urgent", {
-      name: "NurseSched — Urgent",
+    await Notifications.setNotificationChannelAsync("SnowEd_urgent", {
+      name: "SnowEd — Urgent",
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 400, 200, 400],
       lightColor: "#E24B4A",
@@ -79,16 +79,16 @@ export async function applySchemeToChannels(scheme: string): Promise<void> {
   if (Platform.OS !== "android") return;
   const hex = SCHEME_COLOR[scheme] ?? "#D4537E";
 
-  await Notifications.setNotificationChannelAsync("nursesched_default", {
-    name: "NurseSched — General",
+  await Notifications.setNotificationChannelAsync("SnowEd_default", {
+    name: "SnowEd — General",
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: hex,
     sound: "default",
   });
 
-  await Notifications.setNotificationChannelAsync("nursesched_urgent", {
-    name: "NurseSched — Urgent",
+  await Notifications.setNotificationChannelAsync("SnowEd_urgent", {
+    name: "SnowEd — Urgent",
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 400, 200, 400],
     lightColor: hex,
@@ -115,7 +115,7 @@ export async function scheduleActivityNotification(
 
   const emoji    = TYPE_EMOJI[type]  ?? "📌";
   const typeLabel = TYPE_LABEL[type] ?? type;
-  const channel  = isUrgent ? "nursesched_urgent" : "nursesched_default";
+  const channel  = isUrgent ? "SnowEd_urgent" : "SnowEd_default";
 
   const timeStr = dateTime.toLocaleTimeString([], {
     hour: "2-digit", minute: "2-digit",
@@ -198,7 +198,7 @@ export async function scheduleActivityNotification(
           sound: true,
           data: { scheduleId: id, type, isUrgent },
           ...(Platform.OS === "android" && {
-            channelId: "nursesched_urgent",
+            channelId: "SnowEd_urgent",
             color: SCHEME_COLOR[scheme] ?? "#D4537E",
           }),
         },

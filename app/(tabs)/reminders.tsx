@@ -5,6 +5,8 @@ import { useFocusEffect } from "expo-router";
 import { useTheme } from "../../context/ThemeContext";
 import { API_URL } from "../../constants/apiUrl";
 import { formatDate, isPastDateTime, getTypeColor, getTypeBg } from "../../utils/dateUtils";
+import { ScheduleDetailModal } from "../../components/ScheduleDetailModal";
+
 
 type ScheduleItem = {
   _id: string;
@@ -22,6 +24,13 @@ export default function Reminders() {
   const [urgent, setUrgent] = useState<ScheduleItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [detailItem, setDetailItem] = useState<ScheduleItem | null>(null);
+const [detailVisible, setDetailVisible] = useState(false);
+
+const openDetail = (item: ScheduleItem) => {
+  setDetailItem(item);
+  setDetailVisible(true);
+};
 
   useFocusEffect(
     useCallback(() => {
@@ -33,15 +42,14 @@ export default function Reminders() {
     try {
       const res = await fetch(`${API_URL}/schedules`);
       const data = await res.json();
+      const todayStr = new Date().toISOString().split("T")[0];
+
       const filtered: ScheduleItem[] = Array.isArray(data)
-        ? data.filter((s: ScheduleItem) => s.isUrgent)
+        ? data.filter((s: ScheduleItem) => s.isUrgent && s.date === todayStr)
         : [];
-      // Sort: incomplete first, then by date+time
+
       filtered.sort((a, b) => {
-        if (a.isCompleted !== b.isCompleted)
-          return a.isCompleted ? 1 : -1;
-        const dateCompare = (a.date ?? "").localeCompare(b.date ?? "");
-        if (dateCompare !== 0) return dateCompare;
+        if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
         return (a.startTime ?? "").localeCompare(b.startTime ?? "");
       });
       setUrgent(filtered);
@@ -59,12 +67,9 @@ export default function Reminders() {
   };
 
   const today = new Date().toISOString().split("T")[0];
-  const todayItems = urgent.filter(s => s.date === today && !s.isCompleted);
-  const upcomingItems = urgent.filter(s => s.date > today && !s.isCompleted);
-  const overdueItems = urgent.filter(
-    s => !s.isCompleted && (s.date < today || (s.date === today && isPastDateTime(s.date, s.startTime)))
-  );
-  const doneItems = urgent.filter(s => s.isCompleted);
+  const todayItems  = urgent.filter(s => !s.isCompleted && !isPastDateTime(s.date, s.startTime));
+  const overdueItems = urgent.filter(s => !s.isCompleted && isPastDateTime(s.date, s.startTime));
+  const doneItems   = urgent.filter(s => s.isCompleted);
 
   const bg = colors.background;
 
@@ -80,6 +85,7 @@ export default function Reminders() {
   }
 
   return (
+    
     <ScrollView
       style={[s.screen, { backgroundColor: bg }]}
       showsVerticalScrollIndicator={false}
@@ -127,11 +133,9 @@ export default function Reminders() {
           {overdueItems.length > 0 && (
             <Section label="Overdue" count={overdueItems.length} countColor="#E24B4A">
               {overdueItems.map(item => (
-                <UrgentCard
-                  key={item._id} item={item}
-                  colors={colors} mode={mode}
-                  status="overdue"
-                />
+                <TouchableOpacity key={item._id} onPress={() => openDetail(item)} activeOpacity={0.8}>
+                <UrgentCard item={item} colors={colors} mode={mode} status="today" />
+              </TouchableOpacity>
               ))}
             </Section>
           )}
@@ -140,24 +144,9 @@ export default function Reminders() {
           {todayItems.length > 0 && (
             <Section label="Today" count={todayItems.length} countColor={colors.primary}>
               {todayItems.map(item => (
-                <UrgentCard
-                  key={item._id} item={item}
-                  colors={colors} mode={mode}
-                  status="today"
-                />
-              ))}
-            </Section>
-          )}
-
-          {/* UPCOMING */}
-          {upcomingItems.length > 0 && (
-            <Section label="Upcoming" count={upcomingItems.length} countColor="#378ADD">
-              {upcomingItems.map(item => (
-                <UrgentCard
-                  key={item._id} item={item}
-                  colors={colors} mode={mode}
-                  status="upcoming"
-                />
+                <TouchableOpacity key={item._id} onPress={() => openDetail(item)} activeOpacity={0.8}>
+                <UrgentCard item={item} colors={colors} mode={mode} status="today" />
+                </TouchableOpacity>
               ))}
             </Section>
           )}
@@ -166,17 +155,21 @@ export default function Reminders() {
           {doneItems.length > 0 && (
             <Section label="Completed" count={doneItems.length} countColor="#639922">
               {doneItems.map(item => (
-                <UrgentCard
-                  key={item._id} item={item}
-                  colors={colors} mode={mode}
-                  status="done"
-                />
+                <TouchableOpacity key={item._id} onPress={() => openDetail(item)} activeOpacity={0.8}>
+  <UrgentCard item={item} colors={colors} mode={mode} status="today" />
+</TouchableOpacity>
               ))}
             </Section>
           )}
         </>
       )}
-
+      <ScheduleDetailModal
+  item={detailItem}
+  visible={detailVisible}
+  onClose={() => setDetailVisible(false)}
+  colors={colors}
+  readOnly={true}             // set true for Reminders and Courses (view-only)
+/>
       <View style={{ height: 40 }} />
     </ScrollView>
   );
