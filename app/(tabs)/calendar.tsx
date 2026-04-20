@@ -153,7 +153,7 @@ export default function Calendar() {
 
         {/* Legend */}
         <View style={s.legend}>
-          {[["Duty","#D4537E"],["Quiz","#BA7517"],["Class","#378ADD"],["Activity","#639922"],["Review","#7F77DD"]].map(([l,c])=>(
+          {[["Duty","#D4537E"],["Quiz","#BA7517"],["Class","#c5cf08"],["Activity","rgb(31, 160, 160)"],["Review","#7F77DD"],["General","#21a702"]].map(([l,c])=>(
             <View key={l} style={s.legendItem}>
               <View style={[s.legendDot,{backgroundColor:c}]}/>
               <Text style={[s.legendTxt, { color: colors.textSecondary }]}>{l}</Text>

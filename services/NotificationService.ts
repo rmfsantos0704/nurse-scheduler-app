@@ -18,6 +18,7 @@ const TYPE_EMOJI: Record<string, string> = {
   Duty:     "🏥",
   Study:    "📚",
   Exam:     "📋",
+  General:  "📌",
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -28,6 +29,7 @@ const TYPE_LABEL: Record<string, string> = {
   Duty:     "Hospital duty",
   Study:    "Study session",
   Exam:     "Exam",
+  General:  "General",
 };
 
 // Map color scheme name → hex (mirrors ThemeContext)

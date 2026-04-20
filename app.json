@@ -22,6 +22,15 @@
       "bundleIdentifier": "com.snowed.app",
       "supportsTablet": false
     },
-    "plugins": ["expo-notifications", "expo-image-picker"]
+     "plugins": [
+      "expo-notifications",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SnowEd needs photo access to attach images to notes.",
+          "cameraPermission": "SnowEd needs camera access to take photos for notes."
+        }
+      ]
+    ]
   }
 }

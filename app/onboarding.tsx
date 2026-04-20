@@ -460,7 +460,7 @@ function CourseSetupSlide({ accent, pg, courses, setCourses }: SP & {
         { lbl: "Subject name *", val: cName, set: setCName, icon: "library-outline",  ph: "e.g. Mathematics, Biology" },
         { lbl: "Subject code",   val: cCode, set: setCCode, icon: "code-outline",     ph: "e.g. MATH 101, BIO 201"    },
       ].map(f => (
-        <View key={f.lbl} style={{ marginBottom: 12 }}>
+        <View key={f.lbl} style={{ marginBottom: 12, width: "100%"}}>
           <Text style={[sl.fieldLbl, { color: accent.primary }]}>{f.lbl}</Text>
           <View style={[sl.inputRow, {
   borderColor: cName ? accent.primary : pg.bord,
@@ -480,7 +480,7 @@ function CourseSetupSlide({ accent, pg, courses, setCourses }: SP & {
         { lbl: "Teacher / professor", val: cInstructor, set: setCInstructor, icon: "person-outline",   ph: "e.g. Mr. Cruz, Ms. Santos" },
         { lbl: "Room / location",     val: cRoom,       set: setCRoom,       icon: "location-outline", ph: "e.g. Room 204, Science Lab" },
       ].map(f => (
-        <View key={f.lbl} style={{ marginBottom: 12 }}>
+        <View key={f.lbl} style={{ marginBottom: 12,width: "100%" }}>
           <Text style={[sl.fieldLbl, { color: accent.primary }]}>{f.lbl}</Text>
           <View style={[sl.inputRow, { borderColor: f.val ? accent.primary : pg.bord, backgroundColor: pg.card }]}>
             <Ionicons name={f.icon as any} size={15} color={accent.primary} style={{ marginRight: 8 }} />
@@ -794,17 +794,20 @@ const sl = StyleSheet.create({
 inputRow: {
   flexDirection: "row",
   alignItems: "center",
-  backgroundColor: "#fff",
   borderWidth: 1,
-  borderRadius: 12,
-  paddingHorizontal: 16,   // ← was 14
-  paddingVertical: 16,     // ← was 12
-  marginBottom: 14,        // ← add bottom margin so fields breathe
+  borderRadius: 14,
+
+  paddingHorizontal: 16,
+  paddingVertical: 18, // 🔥 more vertical space
+
+  minHeight: 56, // 🔥 forces proper input height
+
+  marginBottom: 14,
 },
-  input: {
+input: {
   flex: 1,
-  fontSize: 15,   // ← was 14
-  color: "#1A0D14",
+  fontSize: 16,      // 🔥 bigger text
+  lineHeight: 22,    // 🔥 improves readability
 },
   required:        { fontSize: 11, color: "#E24B4A", marginTop: 2 },
   yearChip:        { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },

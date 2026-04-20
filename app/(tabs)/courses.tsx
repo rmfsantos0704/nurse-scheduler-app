@@ -40,12 +40,12 @@ const COURSE_COLORS = [
 ];
 
 const TYPE_COLORS: Record<string, string> = {
-  Quiz:"#BA7517", Activity:"#639922", Review:"#7F77DD",
-  Class:"#378ADD", Duty:"#D4537E", Study:"#378ADD", Exam:"#E24B4A",
+  Quiz:"#BA7517", Activity:"rgb(31, 160, 160)", Review:"#7F77DD",
+  Class:"#c5cf08", Duty:"#D4537E", Study:"#378ADD", Exam:"#E24B4A",General:"#21a702",
 };
 const TYPE_BG: Record<string, string> = {
   Quiz:"#FAEEDA", Activity:"#EAF3DE", Review:"#EEEDFE",
-  Class:"#E6F1FB", Duty:"#FBEAF0", Study:"#E6F1FB", Exam:"#FCEBEB",
+  Class:"#E6F1FB", Duty:"#FBEAF0", Study:"#E6F1FB", Exam:"#FCEBEB",General:"#E6F1FB",
 };
 
 const EMPTY_COURSE = { name:"", code:"", instructor:"", room:"", color: COURSE_COLORS[0], timeslots:[] as Timeslot[] };

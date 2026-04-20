@@ -48,6 +48,16 @@ const REMIND_OPTIONS = [
 
 
 export default function Home() {
+  const normalizeSchedule = (item: any) => ({
+  _id: item._id,
+  title: item.title ?? "",
+  type: item.type ?? "General",
+  date: item.date ?? "",
+  startTime: item.startTime ?? "",
+  description: item.description ?? "",
+  isCompleted: item.isCompleted ?? false,
+  isUrgent: item.isUrgent ?? false,
+});
   const [remindMinutes, setRemindMinutes] = useState<number>(15);
   const { colors, scheme } = useTheme();
   const [items, setItems] = useState<ScheduleItem[]>([]);
@@ -154,89 +164,7 @@ const fetchSchedules = async () => {
     setSelectedDate(new Date()); setSelectedTime(new Date());
   };
 
-  // ─── CREATE ──────────────────────────────────────────────────────────
   const handleCreate = async () => {
-    if (!title.trim()) { Alert.alert("Missing field", "Please enter a title."); return; }
-    setSaving(true);
-    const timeStr = toTimeString(selectedTime);
-    const dateStr = toDateString(selectedDate);
-    try {
-      const res = await fetch(`${API_URL}/schedules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim(), type: selectedType,
-          date: dateStr, startTime: timeStr,
-          description: description.trim(),
-          isUrgent, isCompleted: false,
-          courseId: selectedCourseId,
-        }),
-      });
-      const newItem: ScheduleItem = await res.json();
-      setItems(prev =>
-        [...prev, newItem].sort((a, b) =>
-          (a.startTime ?? "").localeCompare(b.startTime ?? "")
-        )
-      );
-      // Schedule notification
-      if (notifGranted) {
-  const dt = buildDateTime(dateStr, timeStr);
-  // Shift trigger by remind offset
-  const triggerDt = new Date(dt.getTime() - remindMinutes * 60 * 1000);
-  const effectiveDt = triggerDt > new Date() ? triggerDt : dt;
-  await scheduleActivityNotification(
-    newItem._id, newItem.title, newItem.type,
-    newItem.description ?? "", effectiveDt,
-    newItem.isUrgent ?? false, scheme
-  );
-}
-      closeModal();
-    } catch {
-      Alert.alert("Error", "Could not save schedule.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // ─── UPDATE ──────────────────────────────────────────────────────────
-  const handleUpdate = async () => {
-    if (!editingItem) return;
-    if (!title.trim()) { Alert.alert("Missing field", "Please enter a title."); return; }
-    setSaving(true);
-    const timeStr = toTimeString(selectedTime);
-    const dateStr = toDateString(selectedDate);
-    try {
-      const res = await fetch(`${API_URL}/schedules/${editingItem._id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim(), type: selectedType,
-          date: dateStr, startTime: timeStr,
-          description: description.trim(), isUrgent,
-          courseId: selectedCourseId,
-        }),
-      });
-      const updated: ScheduleItem = await res.json();
-      setItems(prev =>
-        prev.map(i => i._id === updated._id ? updated : i)
-          .sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? ""))
-      );
-      if (notifGranted) {
-          const dt = buildDateTime(dateStr, timeStr);
-          await scheduleActivityNotification(
-            updated._id,
-            updated.title,
-            updated.type,           // ← new
-            updated.description ?? "",
-            dt,
-            updated.isUrgent ?? false,  // ← new
-            scheme                  // ← new
-          );
-        }
-      closeModal();
-    } catch {
-      Alert.alert("Error", "Could not update schedule.");
-    } finally {const handleCreate = async () => {
   if (!title.trim()) {
     Alert.alert("Missing field", "Please enter a title.");
     return;
@@ -253,7 +181,7 @@ const fetchSchedules = async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: title.trim(),
-        type: selectedType,
+        type: selectedType || "General",
         date: dateStr,
         startTime: timeStr,
         description: description.trim(),
@@ -263,19 +191,11 @@ const fetchSchedules = async () => {
       }),
     });
 
-    const data = await res.json();
-    console.log("CREATE RESPONSE:", data);
+    const raw = await res.json();
+    console.log("CREATE:", raw);
 
-    // 🚨 GUARD
-    if (!data || !data._id) {
-      throw new Error("Invalid schedule returned from server");
-    }
-
-    setItems(prev =>
-      [...prev, data].sort((a, b) =>
-        (a.startTime ?? "").localeCompare(b.startTime ?? "")
-      )
-    );
+    // ✅ REFETCH INSTEAD OF MANUAL STATE
+    await fetchSchedules();
 
     if (notifGranted) {
       const dt = buildDateTime(dateStr, timeStr);
@@ -283,12 +203,12 @@ const fetchSchedules = async () => {
       const effectiveDt = triggerDt > new Date() ? triggerDt : dt;
 
       await scheduleActivityNotification(
-        data._id,
-        data.title,
-        data.type,
-        data.description ?? "",
+        raw._id,
+        raw.title,
+        raw.type,
+        raw.description ?? "",
         effectiveDt,
-        data.isUrgent ?? false,
+        raw.isUrgent ?? false,
         scheme
       );
     }
@@ -301,10 +221,62 @@ const fetchSchedules = async () => {
     setSaving(false);
   }
 };
-      setSaving(false);
-    }
-  };
 
+ const handleUpdate = async () => {
+  if (!editingItem) return;
+
+  if (!title.trim()) {
+    Alert.alert("Missing field", "Please enter a title.");
+    return;
+  }
+
+  setSaving(true);
+
+  const timeStr = toTimeString(selectedTime);
+  const dateStr = toDateString(selectedDate);
+
+  try {
+    const res = await fetch(`${API_URL}/schedules/${editingItem._id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: title.trim(),
+        type: selectedType || "General",
+        date: dateStr,
+        startTime: timeStr,
+        description: description.trim(),
+        isUrgent,
+        courseId: selectedCourseId,
+      }),
+    });
+
+    const raw = await res.json();
+    console.log("UPDATE:", raw);
+
+    // ✅ REFETCH
+    await fetchSchedules();
+
+    if (notifGranted) {
+      const dt = buildDateTime(dateStr, timeStr);
+      await scheduleActivityNotification(
+        raw._id,
+        raw.title,
+        raw.type,
+        raw.description ?? "",
+        dt,
+        raw.isUrgent ?? false,
+        scheme
+      );
+    }
+
+    closeModal();
+  } catch (err) {
+    console.error(err);
+    Alert.alert("Error", "Could not update schedule.");
+  } finally {
+    setSaving(false);
+  }
+};
   // ─── TOGGLE COMPLETE ─────────────────────────────────────────────────
   const toggleComplete = async (item: ScheduleItem) => {
     const updated = { ...item, isCompleted: !item.isCompleted };
@@ -808,16 +780,13 @@ const fetchSchedules = async () => {
           </View>
         </View>
       </Modal>
-      <ScheduleDetailModal
-  item={detailItem}
-  visible={detailVisible}
-  onClose={() => setDetailVisible(false)}
-  colors={colors}
-  onEdit={openEdit}
-  onDelete={handleDelete}
-  onToggleComplete={toggleComplete}
-  readOnly={false}
-/>
+             <ScheduleDetailModal
+        item={detailItem}
+        visible={detailVisible}
+        onClose={() => setDetailVisible(false)}
+        colors={colors}
+        readOnly={false}
+      />         
     </>
   );
 }
