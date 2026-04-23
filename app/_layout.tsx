@@ -34,18 +34,10 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen 
-          name="index" 
-          options={{ gestureEnabled: false, animationEnabled: false }} 
-        />
-        <Stack.Screen 
-          name="onboarding" 
-          options={{ gestureEnabled: false, animationEnabled: false }} 
-        />
-        <Stack.Screen 
-          name="(tabs)" 
-          options={{ gestureEnabled: false, animationEnabled: false }} 
-        />
+        <Stack.Screen name="onboarding"  options={{ gestureEnabled: false }} />
+        <Stack.Screen name="(tabs)"      options={{ gestureEnabled: false }} />
+        <Stack.Screen name="settings"    options={{ presentation: "card" }} />
+        <Stack.Screen name="note-editor" options={{ headerShown: false, animation: "slide_from_right" }} />
       </Stack>
     </ThemeProvider>
   );

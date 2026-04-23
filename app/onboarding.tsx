@@ -21,14 +21,13 @@ const SCHEMES = [
   { key: "green",  label: "Forest", primary: "#639922", light: "#EAF3DE", dark: "#27500A" },
 ] as const;
 
-const YEAR_LEVELS = ["Grade 7","Grade 8","Grade 9","Grade 10","Grade 11","Grade 12","1st Year","2nd Year","3rd Year","4th Year","5th Year"];
 const COURSE_COLORS = ["#378ADD","#D4537E","#7F77DD","#1D9E75","#639922","#BA7517","#E24B4A","#0F6E56"];
 const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 
 type SchemeKey = typeof SCHEMES[number]["key"];
 type ModeKey = "light" | "dark";
-type SlideId = "welcome" | "features" | "setup" | "courses" | "appearance" | "ready";
-const SLIDES: SlideId[] = ["welcome", "features", "setup", "courses", "appearance", "ready"];
+type SlideId = "welcome" | "features" | "appearance" | "courses" | "ready";
+const SLIDES: SlideId[] = ["welcome", "features","appearance", "courses", "ready"];
 
 type OnboardingCourse = {
   name: string; code: string; instructor: string;
@@ -46,12 +45,6 @@ const PAGE_BORD = { light: "#E8E8E8", dark: "#2E2E2E" };
 export default function Onboarding() {
   const flatRef = useRef<FlatList>(null);
   const [index, setIndex] = useState(0);
-
-  const [name,    setName]    = useState("");
-  const [school,  setSchool]  = useState("");
-  const [course,  setCourse]  = useState("");
-  const [year,    setYear]    = useState("1st Year");
-  const [section, setSection] = useState("");
 
   const [scheme, setScheme] = useState<SchemeKey>("blue");
   const [mode,   setMode]   = useState<ModeKey>("light");
@@ -71,7 +64,7 @@ export default function Onboarding() {
   };
 
   const isLast = index === SLIDES.length - 1;
-  const canNext = !(SLIDES[index] === "setup" && !name.trim());
+  const canNext = true;
 
   const goTo = (i: number) => {
     flatRef.current?.scrollToIndex({ index: i, animated: true });
@@ -85,7 +78,7 @@ export default function Onboarding() {
   };
 
   const finish = async () => {
-    const profile = { name: name.trim(), school: school.trim(), course: course.trim(), year, section: section.trim(), avatar: null };
+    const profile = { name: "", school: "", course: "", year: "", section: "", avatar: null };
     await AsyncStorage.multiSet([
       ["onboardingDone", "true"],
       ["profileData",    JSON.stringify(profile)],
@@ -113,45 +106,86 @@ export default function Onboarding() {
     switch (id) {
       case "welcome":    return <WelcomeSlide    {...sharedProps} />;
       case "features":   return <FeaturesSlide   {...sharedProps} />;
-      case "setup":      return <SetupSlide      {...sharedProps} name={name} setName={setName} school={school} setSchool={setSchool} course={course} setCourse={setCourse} year={year} setYear={setYear} section={section} setSection={setSection} />;
+          case "appearance":
+      return (
+        <AppearanceSlide
+          {...sharedProps}
+          setScheme={setScheme}
+          setMode={setMode}
+          SCHEMES={SCHEMES}
+        />
+      );
       case "courses":    return <CourseSetupSlide {...sharedProps} courses={onboardingCourses} setCourses={setOnboardingCourses} />;
-      case "appearance": return <AppearanceSlide  {...sharedProps} setScheme={setScheme} setMode={setMode} SCHEMES={SCHEMES} />;
-      case "ready":      return <ReadySlide       {...sharedProps} name={name} />;
+      case "ready":      return <ReadySlide       {...sharedProps} name={""} />;
     }
   };
 
-  return (
-    <View style={[s.root, { backgroundColor: pg.bg }]}>
-      <StatusBar
-        barStyle={mode === "dark" ? "light-content" : "dark-content"}
-        backgroundColor={pg.bg}
-      />
+return (
+  <View style={[s.root, { backgroundColor: pg.bg }]}>
+    <StatusBar
+      barStyle={mode === "dark" ? "light-content" : "dark-content"}
+      backgroundColor={pg.bg}
+    />
 
-      {/* Skip */}
-      {!isLast && index < 2 && (
-        <TouchableOpacity style={[s.skipBtn, { backgroundColor: pg.card, borderColor: pg.bord }]} onPress={finish}>
-          <Text style={[s.skipTxt, { color: pg.sub }]}>Skip</Text>
-        </TouchableOpacity>
-      )}
+    {!isLast && index < 2 && (
+      <TouchableOpacity
+        style={[s.skipBtn, { backgroundColor: pg.card, borderColor: pg.bord }]}
+        onPress={finish}
+      >
+        <Text style={[s.skipTxt, { color: pg.sub }]}>Skip</Text>
+      </TouchableOpacity>
+    )}
 
+    {/* ✅ FIXED HERE */}
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
       <FlatList
         ref={flatRef}
         data={SLIDES}
-        keyExtractor={id => id}
+        keyExtractor={(id) => id}
         horizontal
         pagingEnabled
         scrollEnabled={false}
         showsHorizontalScrollIndicator={false}
         onScroll={onScroll}
         scrollEventThrottle={16}
+        extraData={[scheme, mode, index]}
+
+        // ✅ CRITICAL FIX
+        getItemLayout={(data, index) => ({
+          length: width,
+          offset: width * index,
+          index,
+        })}
+
+        // ✅ ENSURE ALL SLIDES RENDERED
+        initialNumToRender={SLIDES.length}
+
+        // ✅ FAILSAFE FOR SCROLL BUG
+        onScrollToIndexFailed={(info) => {
+          setTimeout(() => {
+            flatRef.current?.scrollToIndex({
+              index: info.index,
+              animated: true,
+            });
+          }, 100);
+        }}
+
         renderItem={({ item }) => (
-          <KeyboardAvoidingView style={{ width }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-            <ScrollView contentContainerStyle={s.slideScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <View style={{ width }}>
+            <ScrollView
+              contentContainerStyle={s.slideScroll}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
               {renderSlide(item)}
             </ScrollView>
-          </KeyboardAvoidingView>
+          </View>
         )}
       />
+    </KeyboardAvoidingView>
 
       {/* Bottom nav */}
       <View style={[s.bottom, { backgroundColor: pg.bg, borderTopColor: pg.bord }]}>
@@ -271,63 +305,7 @@ function FeaturesSlide({ accent, pg }: SP) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SLIDE 3 — Profile setup
-// ─────────────────────────────────────────────────────────────────────────────
-function SetupSlide({ accent, pg, name, setName, school, setSchool, course, setCourse, year, setYear, section, setSection }: SP & any) {
-  return (
-    <View style={sl.wrap}>
-      <View style={[sl.iconCircleSmall, { backgroundColor: accent.primary + "18" }]}>
-        <Ionicons name="person-add-outline" size={32} color={accent.primary} />
-      </View>
-      <View style={[sl.tagPill, { backgroundColor: accent.primary + "18" }]}>
-        <Text style={[sl.tag, { color: accent.primary }]}>Your profile</Text>
-      </View>
-      <Text style={[sl.title, { color: pg.text }]}>{"Let's set up\nyour profile"}</Text>
-      <Text style={[sl.body, { color: pg.sub }]}>This personalizes your dashboard and helps us greet you.</Text>
-
-      <View style={sl.formWrap}>
-        {[
-          { label: "Full name *",          key: "name",    val: name,    set: setName,    icon: "person-outline",   ph: "e.g. Alex Rivera",            required: true  },
-          { label: "School / university",  key: "school",  val: school,  set: setSchool,  icon: "school-outline",   ph: "e.g. De La Salle University",  required: false },
-          { label: "Course / strand",      key: "course",  val: course,  set: setCourse,  icon: "book-outline",     ph: "e.g. BS Computer Science",     required: false },
-          { label: "Section",              key: "section", val: section, set: setSection, icon: "people-outline",   ph: "e.g. Section B",               required: false },
-        ].map(f => (
-          <View key={f.key} style={sl.fieldWrap}>
-            <Text style={[sl.fieldLbl, { color: accent.primary }]}>{f.label}</Text>
-            <View style={[sl.inputRow, { borderColor: f.val ? accent.primary : pg.bord, backgroundColor: pg.card }]}>
-              <Ionicons name={f.icon as any} size={16} color={accent.primary} style={{ marginRight: 8 }} />
-              <TextInput style={[sl.input, { color: pg.text }]} placeholder={f.ph}
-                placeholderTextColor={pg.sub} value={f.val} onChangeText={f.set} autoCapitalize="words" />
-            </View>
-            {f.required && !f.val.trim() && (
-              <Text style={sl.required}>Required to continue</Text>
-            )}
-          </View>
-        ))}
-
-        <View style={sl.fieldWrap}>
-          <Text style={[sl.fieldLbl, { color: accent.primary }]}>Year level / grade</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={{ flexDirection: "row", gap: 8, paddingVertical: 4 }}>
-              {YEAR_LEVELS.map(y => (
-                <TouchableOpacity key={y} onPress={() => setYear(y)}
-                  style={[sl.yearChip, {
-                    backgroundColor: year === y ? accent.primary : pg.card,
-                    borderColor: year === y ? accent.primary : pg.bord,
-                  }]}>
-                  <Text style={[sl.yearChipTxt, { color: year === y ? "#fff" : pg.sub }]}>{y}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SLIDE 4 — Courses
+// SLIDE 3 — Courses
 // ─────────────────────────────────────────────────────────────────────────────
 function CourseSetupSlide({ accent, pg, courses, setCourses }: SP & {
   courses: OnboardingCourse[];
@@ -465,8 +443,8 @@ function CourseSetupSlide({ accent, pg, courses, setCourses }: SP & {
           <View style={[sl.inputRow, {
   borderColor: cName ? accent.primary : pg.bord,
   backgroundColor: pg.card,
-  paddingVertical: 16,    // ← was 12
-  paddingHorizontal: 16,  // ← was 14
+  paddingVertical: 16,    
+  paddingHorizontal: 16,  
 }]}>
   <Ionicons name="library-outline" size={16} color={accent.primary} style={{ marginRight: 10 }} />
   <TextInput style={[sl.input, { color: pg.text, fontSize: 15 }]} placeholder={f.ph}
@@ -573,10 +551,6 @@ function CourseSetupSlide({ accent, pg, courses, setCourses }: SP & {
     </View>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SLIDE 5 — Appearance (whole page updates live)
-// ─────────────────────────────────────────────────────────────────────────────
 function AppearanceSlide({ accent, pg, mode, scheme, setScheme, setMode, SCHEMES }: SP & any) {
   return (
     <View style={sl.wrap}>
@@ -588,7 +562,7 @@ function AppearanceSlide({ accent, pg, mode, scheme, setScheme, setMode, SCHEMES
       </View>
       <Text style={[sl.title, { color: pg.text }]}>{"Make it\nyours"}</Text>
       <Text style={[sl.body, { color: pg.sub }]}>
-        Pick your color theme and display mode. The whole page updates live as you choose — change anytime in Profile.
+        Pick your color theme and display mode. The whole page updates live as you choose.
       </Text>
 
       <Text style={[csl.sectionLbl, { color: pg.sub }]}>Display mode</Text>
@@ -606,7 +580,6 @@ function AppearanceSlide({ accent, pg, mode, scheme, setScheme, setMode, SCHEMES
               }]}
               activeOpacity={0.8}
             >
-              {/* Mini mockup */}
               <View style={{ width: "100%", gap: 5, marginBottom: 10 }}>
                 <View style={[asl.mockBar, { backgroundColor: isDark ? "#2A2A2A" : "#EEEEEE", width: "70%" }]} />
                 <View style={[asl.mockBar, { backgroundColor: isDark ? "#222222" : "#E8E8E8", width: "50%", height: 5 }]} />
@@ -615,15 +588,6 @@ function AppearanceSlide({ accent, pg, mode, scheme, setScheme, setMode, SCHEMES
                   borderLeftColor: accent.primary, borderLeftWidth: 3,
                 }]}>
                   <View style={[asl.mockBar, { backgroundColor: accent.primary, width: "60%", height: 5 }]} />
-                  <View style={[asl.mockBar, { backgroundColor: isDark ? "#333" : "#ddd", width: "40%", height: 4, marginTop: 4 }]} />
-                </View>
-                <View style={{ flexDirection: "row", gap: 4 }}>
-                  {[1,2,3].map(n => (
-                    <View key={n} style={[asl.mockPill, {
-                      backgroundColor: n === 1 ? accent.primary : isDark ? "#2A2A2A" : "#EEEEEE",
-                      flex: 1,
-                    }]} />
-                  ))}
                 </View>
               </View>
               <Ionicons name={isDark ? "moon" : "sunny"} size={20} color={active ? accent.primary : pg.sub} />
@@ -640,73 +604,48 @@ function AppearanceSlide({ accent, pg, mode, scheme, setScheme, setMode, SCHEMES
         })}
       </View>
 
-      {/* Color theme */}
-<Text style={[csl.sectionLbl, { color: pg.sub }]}>Color theme</Text>
-<View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, width: "100%" }}>
-  {SCHEMES.map((sc: any) => {
-    const active = scheme === sc.key;
-    return (
-      <TouchableOpacity
-        key={sc.key}
-        onPress={() => setScheme(sc.key)}
-        style={[{
-          alignItems: "center",
-          gap: 6,
-          borderRadius: 14,
-          paddingHorizontal: 14,
-          paddingVertical: 10,
-          backgroundColor: pg.card,
-          borderColor: active ? sc.primary : pg.bord,
-          borderWidth: active ? 2 : 1,
-          flexDirection: "row",
-        }]}
-        activeOpacity={0.8}
-      >
-        {/* Color circle with checkmark ON TOP of it */}
-        <View style={{ width: 22, height: 22, position: "relative" }}>
-          <View style={{
-            width: 22, height: 22, borderRadius: 11,
-            backgroundColor: sc.primary,
-          }} />
-          {active && (
-            <View style={{
-              position: "absolute",
-              inset: 0,
-              width: 22, height: 22,
-              borderRadius: 11,
-              backgroundColor: "rgba(0,0,0,0.25)",
-              alignItems: "center",
-              justifyContent: "center",
-            }}>
-              <Ionicons name="checkmark" size={13} color="#fff" />
-            </View>
-          )}
-        </View>
-        <Text style={[{ fontSize: 13, fontWeight: "500" }, { color: active ? sc.primary : pg.sub }]}>
-          {sc.label}
-        </Text>
-      </TouchableOpacity>
-    );
-  })}
-</View>
-
-      <View style={[asl.previewBar, { backgroundColor: pg.card, borderColor: pg.bord }]}>
-        <View style={[asl.previewDot, { backgroundColor: accent.primary }]} />
-        <Text style={[asl.previewTxt, { color: pg.text }]}>
-          {accent.label} · {mode === "dark" ? "Dark" : "Light"} mode
-        </Text>
-        <View style={{ flexDirection: "row", gap: 4 }}>
-          {[accent.primary, accent.primary + "66", accent.primary + "33"].map((c, i) => (
-            <View key={i} style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: c }} />
-          ))}
-        </View>
+      <Text style={[csl.sectionLbl, { color: pg.sub }]}>Color theme</Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, width: "100%" }}>
+        {SCHEMES.map((sc: any) => {
+          const active = scheme === sc.key;
+          return (
+            <TouchableOpacity
+              key={sc.key}
+              onPress={() => setScheme(sc.key)}
+              style={[{
+                alignItems: "center",
+                gap: 6,
+                borderRadius: 14,
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+                backgroundColor: pg.card,
+                borderColor: active ? sc.primary : pg.bord,
+                borderWidth: active ? 2 : 1,
+                flexDirection: "row",
+              }]}
+              activeOpacity={0.8}
+            >
+              <View style={{ width: 22, height: 22, position: "relative" }}>
+                <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: sc.primary }} />
+                {active && (
+                  <View style={{ position: "absolute", inset: 0, width: 22, height: 22, borderRadius: 11, backgroundColor: "rgba(0,0,0,0.25)", alignItems: "center", justifyContent: "center" }}>
+                    <Ionicons name="checkmark" size={13} color="#fff" />
+                  </View>
+                )}
+              </View>
+              <Text style={[{ fontSize: 13, fontWeight: "500" }, { color: active ? sc.primary : pg.sub }]}>
+                {sc.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
     </View>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SLIDE 6 — Ready
+// SLIDE 4 — Ready
 // ─────────────────────────────────────────────────────────────────────────────
 function ReadySlide({ accent, pg, name }: SP & { name: string }) {
   return (
@@ -728,7 +667,7 @@ function ReadySlide({ accent, pg, name }: SP & { name: string }) {
         {name.trim() ? `Welcome,\n${name.split(" ")[0]}! 👋` : "You're all set! 👋"}
       </Text>
       <Text style={[sl.body, { color: pg.sub, textAlign: "center" }]}>
-        Your profile, subjects, and preferences are saved. Start organizing your school life with SnowEd.
+        Your subjects and preferences are saved. Start organizing your school life with SnowEd.
       </Text>
 
       <View style={[sl.card, { borderColor: pg.bord, backgroundColor: pg.card }]}>
@@ -790,28 +729,21 @@ const sl = StyleSheet.create({
   formWrap:        { width: "100%", gap: 14 },
   fieldWrap:       { gap: 5 },
   fieldLbl:        { fontSize: 12, fontWeight: "600", letterSpacing: 0.3, marginBottom: 5 },
-  // In the sl StyleSheet, update inputRow:
-inputRow: {
-  flexDirection: "row",
-  alignItems: "center",
-  borderWidth: 1,
-  borderRadius: 14,
-
-  paddingHorizontal: 16,
-  paddingVertical: 18, // 🔥 more vertical space
-
-  minHeight: 56, // 🔥 forces proper input height
-
-  marginBottom: 14,
-},
-input: {
-  flex: 1,
-  fontSize: 16,      // 🔥 bigger text
-  lineHeight: 22,    // 🔥 improves readability
-},
-  required:        { fontSize: 11, color: "#E24B4A", marginTop: 2 },
-  yearChip:        { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
-  yearChipTxt:     { fontSize: 13, fontWeight: "500" },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 18, 
+    minHeight: 56, 
+    marginBottom: 14,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,     
+    lineHeight: 22,   
+  },
   sectionLbl:      { fontSize: 11, fontWeight: "700", letterSpacing: 0.5, marginBottom: 10, textTransform: "uppercase" },
 });
 
