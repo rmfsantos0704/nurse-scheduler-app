@@ -6,6 +6,8 @@ import { API_URL } from "../../constants/apiUrl";
 import { formatDate, getTypeColor, getTypeBg, isPastDateTime } from "../../utils/dateUtils";
 import { useTheme } from "../../context/ThemeContext";
 import { ScheduleDetailModal } from "../../components/ScheduleDetailModal";
+import { SafeScreen } from "@/components/SafeScreen";
+import { router } from "expo-router";
 
 type ScheduleItem = {
   _id: string;
@@ -25,6 +27,7 @@ const MONTHS = [
 ];
 
 export default function Calendar() {
+  const [monthModalVisible, setMonthModalVisible] = useState(false);
   const { colors } = useTheme();
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());
@@ -125,6 +128,7 @@ export default function Calendar() {
   colors={colors}
   readOnly={true}             // set true for Reminders and Courses (view-only)
   />
+    <SafeScreen edges={["top", "bottom"]}>
       <ScrollView
         style={[s.screen, { backgroundColor: colors.background }]}
         showsVerticalScrollIndicator={false}
@@ -245,10 +249,137 @@ export default function Calendar() {
             <Text style={[s.summaryLbl, { color: colors.textSecondary }]}>Pending</Text>
           </View>
         </View>
-
+      {/* ── VIEW ALL THIS MONTH BUTTON ── */}
+<TouchableOpacity
+  style={[s.monthBtn, { backgroundColor: colors.primary }]}
+  onPress={() => router.push({
+    pathname: "/month-schedules",
+    params: { month: String(viewMonth), year: String(viewYear) },
+  })}
+  activeOpacity={0.85}
+>
+  <Ionicons name="list-outline" size={18} color="#fff" />
+  <Text style={s.monthBtnTxt}>
+    View all {MONTHS[viewMonth]} schedules
+  </Text>
+</TouchableOpacity>
         <View style={{ height: 40 }} />
       </ScrollView>
+     </SafeScreen>         
 
+     {/* ── MONTH OVERVIEW MODAL ── */}
+<Modal
+  visible={monthModalVisible}
+  animationType="slide"
+  transparent
+  onRequestClose={() => setMonthModalVisible(false)}
+>
+  <View style={[s.modalOverlay, { backgroundColor: "rgba(0,0,0,0.35)" }]}>
+    <View style={[s.modalSheet, { backgroundColor: colors.background, maxHeight: "92%" }]}>
+      {/* Header */}
+      <View style={s.modalHeader}>
+        <View>
+          <Text style={[s.modalTitle, { color: colors.textPrimary }]}>
+            {MONTHS[viewMonth]} {viewYear}
+          </Text>
+          <Text style={[s.modalSub, { color: colors.textSecondary }]}>
+            {(() => {
+              const monthItems = allSchedules.filter(s => {
+                const d = new Date(s.date + "T00:00:00");
+                return d.getMonth() === viewMonth && d.getFullYear() === viewYear;
+              });
+              const doneCount = monthItems.filter(i => i.isCompleted).length;
+              return `${monthItems.length} schedule${monthItems.length !== 1 ? "s" : ""} · ${doneCount} completed`;
+            })()}
+          </Text>
+        </View>
+        <TouchableOpacity onPress={() => setMonthModalVisible(false)}>
+          <Ionicons name="close" size={22} color={colors.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {(() => {
+          const monthItems = allSchedules
+            .filter(s => {
+              const d = new Date(s.date + "T00:00:00");
+              return d.getMonth() === viewMonth && d.getFullYear() === viewYear;
+            })
+            .sort((a, b) => a.date.localeCompare(b.date) || (a.startTime ?? "").localeCompare(b.startTime ?? ""));
+
+          if (monthItems.length === 0) {
+            return (
+              <View style={s.modalEmpty}>
+                <Ionicons name="calendar-outline" size={40} color={colors.textSecondary} />
+                <Text style={[s.modalEmptyTxt, { color: colors.textSecondary }]}>
+                  No schedules this month
+                </Text>
+              </View>
+            );
+          }
+
+          // Group by date
+          const grouped: Record<string, ScheduleItem[]> = {};
+          for (const item of monthItems) {
+            if (!grouped[item.date]) grouped[item.date] = [];
+            grouped[item.date].push(item);
+          }
+
+          return Object.entries(grouped).map(([date, dayItems]) => {
+            const [y, m, d] = date.split("-").map(Number);
+            const dateLabel = new Date(y, m - 1, d).toLocaleDateString([], {
+              weekday: "short", month: "short", day: "numeric",
+            });
+            const isToday = date === todayStr;
+
+            return (
+              <View key={date} style={{ marginBottom: 16 }}>
+                {/* Date header */}
+                <View style={[
+                  s.monthDateHeader,
+                  { borderLeftColor: isToday ? colors.primary : colors.cardBorder },
+                ]}>
+                  <Text style={[
+                    s.monthDateLabel,
+                    { color: isToday ? colors.primary : colors.textSecondary },
+                  ]}>
+                    {isToday ? `Today — ${dateLabel}` : dateLabel}
+                  </Text>
+                  <Text style={[s.monthDateCount, { color: colors.textSecondary }]}>
+                    {dayItems.length} task{dayItems.length !== 1 ? "s" : ""}
+                  </Text>
+                </View>
+
+                {/* Items */}
+                {dayItems.map(item => {
+                  const overdue = !item.isCompleted && isPastDateTime(item.date, item.startTime);
+                  return (
+                    <TouchableOpacity
+                      key={item._id}
+                      onPress={() => {
+                        setMonthModalVisible(false);
+                        setTimeout(() => openDetail(item), 300);
+                      }}
+                      activeOpacity={0.75}
+                    >
+                      <ModalItem
+                        item={item}
+                        done={item.isCompleted}
+                        overdue={overdue}
+                        themeColors={colors}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            );
+          });
+        })()}
+        <View style={{ height: 30 }} />
+      </ScrollView>
+    </View>
+  </View>
+</Modal>
       {/* ─── DAY DETAIL MODAL ─── */}
       <Modal
         visible={dayModalVisible}
@@ -377,6 +508,26 @@ const ms = StyleSheet.create({
 });
 
 const s = StyleSheet.create({
+  monthDateHeader: {
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  borderLeftWidth: 3,
+  paddingLeft: 10,
+  marginBottom: 8,
+},
+monthDateLabel: { fontSize: 13, fontWeight: "600" },
+monthDateCount: { fontSize: 12 },
+  monthBtn: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  borderRadius: 25,
+  paddingVertical: 15,
+  marginBottom: 20,
+},
+monthBtnTxt: { color: "#fff", fontSize: 14, fontWeight: "600" },
   screen:         { flex: 1, padding: 16 },
   loader:         { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   loaderTxt:      { fontSize: 14 },

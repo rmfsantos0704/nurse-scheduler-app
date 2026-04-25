@@ -1,10 +1,12 @@
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, Platform,
+  View, Text, StyleSheet, TouchableOpacity,
+  ScrollView, Switch, Platform, Alert,
 } from "react-native";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Notifications from "expo-notifications";
 import { useTheme, ColorScheme } from "../context/ThemeContext";
 
 const SCHEMES: { key: ColorScheme; label: string; color: string }[] = [
@@ -16,31 +18,91 @@ const SCHEMES: { key: ColorScheme; label: string; color: string }[] = [
 ];
 
 const FAQ = [
-  { q: "How do I add a schedule?",           a: "Tap the + button on the Home tab to add classes, quizzes, activities, and more." },
-  { q: "What are urgent reminders?",         a: "Mark any schedule as urgent when adding it — it appears in the Reminders tab." },
-  { q: "How do I change my color theme?",    a: "Scroll to Appearance below and choose a theme. Changes apply instantly." },
-  { q: "Can I link a schedule to a course?", a: "Yes — when adding a schedule, scroll to 'Link to course' and select one." },
-  { q: "How do I delete a schedule?",        a: "Tap any schedule card to open details, then tap the delete button." },
-  { q: "How do notes work?",                 a: "Open the Notes tab to create, edit, and search notes. You can attach photos too." },
-  { q: "What does bold/italic do in Notes?", a: "Select text in the note editor, then tap B, I, U, or the highlight button in the toolbar." },
+  {
+    q: "How do I add a schedule for today?",
+    a: "On the Home tab, tap 'Add schedule' in the Quick Actions section or the empty state button. Fill in the title, type, date, time, and optional course link — then tap 'Add to schedule'.",
+  },
+  {
+    q: "Why isn't my schedule showing on the Home tab?",
+    a: "The Home tab only shows schedules for today. If you added a schedule for a different date, check the Calendar tab or tap 'Total' in the overview cards to see all schedules.",
+  },
+  {
+    q: "What are the different schedule types?",
+    a: "SnowEd supports: Class, Quiz, Exam, Activity, Study, Review, Duty, and General. Each type has its own color to help you identify tasks at a glance.",
+  },
+  {
+    q: "How do urgent reminders work?",
+    a: "When adding a schedule, toggle 'Mark as urgent'. Urgent tasks appear in the Reminders tab and trigger a high-priority notification that can bypass silent mode on Android.",
+  },
+  {
+    q: "How does 'When to remind' work?",
+    a: "Choose how early you want a notification — options range from 'At start time' to '1 day before'. The notification fires at your chosen offset before the schedule's start time.",
+  },
+  {
+    q: "Can I edit a schedule after creating it?",
+    a: "Yes, as long as it's not overdue or completed. Tap any schedule card to open its details, then tap Edit. Overdue and completed schedules are locked from editing.",
+  },
+  {
+    q: "Why can't I edit a schedule?",
+    a: "Schedules that are already overdue (past their start time and not completed) or marked as done cannot be edited. You can still delete them from the detail view.",
+  },
+  {
+    q: "How do I link a schedule to a course?",
+    a: "When adding or editing a schedule, scroll to 'Link to course' and tap a course chip. Linked schedules appear inside that course's detail view under the Courses tab.",
+  },
+  {
+    q: "How do I add and manage courses?",
+    a: "Go to the Courses tab and tap Add. Fill in the subject name, code, teacher, room, color, and class schedule slots. Tap a course card to see its linked schedules and stats.",
+  },
+  {
+    q: "What does the Calendar tab show?",
+    a: "A full monthly calendar with colored dots showing which days have schedules. Tap any date to see that day's tasks grouped by overdue, pending, and completed. Tap 'View all [month] schedules' for a searchable full list.",
+  },
+  {
+    q: "What does the Reminders tab show?",
+    a: "Only schedules marked as urgent for today, grouped into Overdue, Today, and Completed sections. Non-urgent schedules don't appear here — manage those from the Home or Calendar tab.",
+  },
+  {
+    q: "How do I delete multiple notes at once?",
+    a: "Long press any note card to enter select mode. Checkmarks appear on all cards — tap to select, then tap 'Select all' to select everything, or tap 'Delete' to remove the selected notes.",
+  },
 ];
 
 export default function Settings() {
   const { colors, mode, scheme, toggleMode, setScheme } = useTheme();
   const [faqOpen, setFaqOpen] = useState<number | null>(null);
+  const [dnd,     setDnd]     = useState(false);
 
-  const resetOnboarding = () => {
-    require("react-native").Alert.alert(
-      "Replay onboarding",
-      "This will show the setup flow again on next launch.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Reset", style: "destructive", onPress: async () => {
-          await AsyncStorage.removeItem("onboardingDone");
-          router.replace("/onboarding");
-        }},
-      ]
-    );
+  // Load DND state from storage
+  useEffect(() => {
+    AsyncStorage.getItem("dndEnabled").then(v => {
+      if (v === "true") setDnd(true);
+    });
+  }, []);
+
+  const toggleDnd = async (val: boolean) => {
+    setDnd(val);
+    await AsyncStorage.setItem("dndEnabled", val ? "true" : "false");
+    if (val) {
+      await Notifications.setNotificationChannelAsync("snowed_default", {
+        name: "SnowEd Default",
+        importance: Notifications.AndroidImportance.MIN,
+        enableVibrate: false,
+        sound: undefined,
+      }).catch(() => {});
+      // On iOS just cancel all pending when DND on (simplest approach)
+      if (Platform.OS === "ios") {
+        await Notifications.cancelAllScheduledNotificationsAsync();
+      }
+      Alert.alert("Do Not Disturb on", "SnowEd notifications are muted. Turn off DND to resume them.");
+    } else {
+      await Notifications.setNotificationChannelAsync("snowed_default", {
+        name: "SnowEd Default",
+        importance: Notifications.AndroidImportance.HIGH,
+        enableVibrate: true,
+      }).catch(() => {});
+      Alert.alert("Do Not Disturb off", "Notifications are active again.");
+    }
   };
 
   const c = colors;
@@ -56,7 +118,7 @@ export default function Settings() {
         <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: 16 }}>
 
         {/* ── APPEARANCE ── */}
         <View style={[s.card, { backgroundColor: c.card, borderColor: c.cardBorder }]}>
@@ -64,10 +126,10 @@ export default function Settings() {
             <Text style={[s.cardTitle, { color: c.textPrimary }]}>Appearance</Text>
           </View>
 
-          {/* Dark / light toggle */}
+          {/* Dark / light */}
           <View style={[s.row, { borderTopColor: c.cardBorder }]}>
             <View style={s.rowLeft}>
-              <Ionicons name={mode === "dark" ? "moon" : "sunny"} size={20} color={c.primary} />
+              <Ionicons name={mode === "dark" ? "moon" : "sunny-outline"} size={20} color={c.primary} />
               <Text style={[s.rowLabel, { color: c.textPrimary }]}>
                 {mode === "dark" ? "Dark mode" : "Light mode"}
               </Text>
@@ -81,8 +143,8 @@ export default function Settings() {
           </View>
 
           {/* Color scheme */}
-          <View style={[s.row, { borderTopColor: c.cardBorder, flexDirection: "column", alignItems: "flex-start", gap: 12 }]}>
-            <Text style={[s.rowLabel, { color: c.textPrimary }]}>Color theme</Text>
+          <View style={[s.schemeSection, { borderTopColor: c.cardBorder }]}>
+            <Text style={[s.rowLabel, { color: c.textPrimary, marginBottom: 12 }]}>Color theme</Text>
             <View style={s.schemeRow}>
               {SCHEMES.map(sc => (
                 <TouchableOpacity
@@ -109,6 +171,35 @@ export default function Settings() {
           </View>
         </View>
 
+        {/* ── NOTIFICATIONS ── */}
+        <View style={[s.card, { backgroundColor: c.card, borderColor: c.cardBorder }]}>
+          <View style={s.cardHeaderPad}>
+            <Text style={[s.cardTitle, { color: c.textPrimary }]}>Notifications</Text>
+          </View>
+
+          <View style={[s.row, { borderTopColor: c.cardBorder }]}>
+            <View style={s.rowLeft}>
+              <Ionicons
+                name={dnd ? "notifications-off-outline" : "notifications-outline"}
+                size={20}
+                color={dnd ? "#E24B4A" : c.primary}
+              />
+              <View>
+                <Text style={[s.rowLabel, { color: c.textPrimary }]}>Do Not Disturb</Text>
+                <Text style={[s.rowSub, { color: c.textSecondary }]}>
+                  {dnd ? "Notifications muted" : "Notifications active"}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={dnd}
+              onValueChange={toggleDnd}
+              trackColor={{ false: c.primaryLight, true: "#E24B4A" }}
+              thumbColor="#fff"
+            />
+          </View>
+        </View>
+
         {/* ── FAQ ── */}
         <View style={[s.card, { backgroundColor: c.card, borderColor: c.cardBorder }]}>
           <View style={s.cardHeaderPad}>
@@ -119,6 +210,7 @@ export default function Settings() {
               <TouchableOpacity
                 style={[s.faqRow, { borderTopColor: c.cardBorder }]}
                 onPress={() => setFaqOpen(faqOpen === idx ? null : idx)}
+                activeOpacity={0.7}
               >
                 <Text style={[s.faqQ, { color: c.textPrimary }]}>{item.q}</Text>
                 <Ionicons
@@ -135,18 +227,22 @@ export default function Settings() {
           ))}
         </View>
 
-        {/* ── ADVANCED ── */}
+        {/* ── ABOUT ── */}
         <View style={[s.card, { backgroundColor: c.card, borderColor: c.cardBorder }]}>
           <View style={s.cardHeaderPad}>
-            <Text style={[s.cardTitle, { color: c.textPrimary }]}>Advanced</Text>
+            <Text style={[s.cardTitle, { color: c.textPrimary }]}>App info</Text>
           </View>
           <TouchableOpacity
             style={[s.row, { borderTopColor: c.cardBorder }]}
-            onPress={resetOnboarding}
+            onPress={() => router.push("/about")}
+            activeOpacity={0.7}
           >
             <View style={s.rowLeft}>
-              <Ionicons name="refresh-circle-outline" size={20} color="#BA7517" />
-              <Text style={[s.rowLabel, { color: "#BA7517" }]}>Replay onboarding</Text>
+              <Ionicons name="information-circle-outline" size={20} color={c.primary} />
+              <View>
+                <Text style={[s.rowLabel, { color: c.textPrimary }]}>About SnowEd</Text>
+                <Text style={[s.rowSub, { color: c.textSecondary }]}>Version, features & credits</Text>
+              </View>
             </View>
             <Ionicons name="chevron-forward" size={16} color={c.textSecondary} />
           </TouchableOpacity>
@@ -163,12 +259,14 @@ const s = StyleSheet.create({
   header:         { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: Platform.OS === "ios" ? 56 : 36, paddingBottom: 14, borderBottomWidth: 0.5 },
   backBtn:        { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   headerTitle:    { fontSize: 17, fontWeight: "600" },
-  card:           { borderWidth: 0.5, borderRadius: 16, marginHorizontal: 16, marginBottom: 14, marginTop: 14, overflow: "hidden" },
+  card:           { borderWidth: 0.5, borderRadius: 16, marginHorizontal: 16, marginBottom: 14, overflow: "hidden" },
   cardHeaderPad:  { paddingHorizontal: 16, paddingVertical: 14 },
   cardTitle:      { fontSize: 15, fontWeight: "600" },
-  row:            { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderTopWidth: 0.5, paddingHorizontal: 16, paddingVertical: 14 },
-  rowLeft:        { flexDirection: "row", alignItems: "center", gap: 10 },
-  rowLabel:       { fontSize: 14 },
+  row:            { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderTopWidth: 0.5, paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
+  rowLeft:        { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  rowLabel:       { fontSize: 14, fontWeight: "500" },
+  rowSub:         { fontSize: 12, marginTop: 1 },
+  schemeSection:  { borderTopWidth: 0.5, paddingHorizontal: 16, paddingVertical: 14 },
   schemeRow:      { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   schemeChip:     { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8 },
   schemeDot:      { position: "absolute", width: 20, height: 20, borderRadius: 10 },

@@ -8,6 +8,7 @@ import { useFocusEffect } from "expo-router";
 import { useTheme } from "../../context/ThemeContext";
 import { API_URL } from "../../constants/apiUrl";
 import { ScheduleDetailModal } from "../../components/ScheduleDetailModal";
+import { SafeScreen } from "../../components/SafeScreen";
 
 type Timeslot = { day: string; startTime: string; endTime: string };
 
@@ -174,6 +175,7 @@ export default function Courses() {
 
   return (
     <>
+    <SafeScreen edges={["top", "bottom"]}>
       <ScrollView
         style={[s.screen, { backgroundColor: colors.background }]}
         showsVerticalScrollIndicator={false}
@@ -235,7 +237,7 @@ export default function Courses() {
         )}
         <View style={{ height: 40 }} />
       </ScrollView>
-
+      </SafeScreen>
       {/* ── ADD / EDIT MODAL ── */}
       {[{ visible: addModal, close: () => setAddModal(false), onSave: handleCreate, title: "Add course" },
         { visible: editModal, close: () => setEditModal(false), onSave: handleUpdate, title: "Edit course" }]

@@ -18,9 +18,12 @@ import { scheduleService, ScheduleItem } from "../../services/scheduleService";
 import { scheduleActivityNotification } from "../../services/NotificationService";
 import { toTimeString, toDateString, buildDateTime, isPastDateTime } from "../../utils/dateUtils";
 import type { ScheduleType } from "../../constants/scheduleTypes";
+import { SafeScreen } from "../../components/SafeScreen";
+
 
 export default function Home() {
-  const { colors, scheme }  = useTheme();
+  const MASCOT = require("../../assets/images/notification-icon.png");
+  const { colors, scheme, mode  }  = useTheme();
   const { items, loading, refreshing, fetch, refresh, toggleComplete, remove, stats, nextItem, urgentItems, setItems } = useSchedules();
   const { profile, load: loadProfile } = useProfile();
   const { granted: notifGranted }      = useNotifications();
@@ -138,6 +141,7 @@ export default function Home() {
 
   return (
     <>
+    <SafeScreen edges={["top", "bottom"]}>
       <ScrollView
         style={[s.screen, { backgroundColor: colors.background }]}
         showsVerticalScrollIndicator={false}
@@ -145,10 +149,28 @@ export default function Home() {
       >
         {/* GREETING ROW */}
 <View style={s.greetRow}>
+  <View style={[
+  s.mascotWrap,
+  {
+    backgroundColor: mode === "light"
+      ? colors.primaryDark    // dark bg in light mode → white icon pops
+      : colors.primaryLight,  // light bg in dark mode → white icon still pops
+  }
+]}>
+  <Image
+    source={MASCOT}
+    style={s.mascot}
+    resizeMode="contain"
+  />
+</View>
+
+  {/* Text */}
   <View style={{ flex: 1 }}>
     <Text style={[s.greetSub, { color: colors.textSecondary }]}>{greeting},</Text>
     <Text style={[s.greetName, { color: colors.textPrimary }]}>SnowEd</Text>
   </View>
+
+  {/* Settings button */}
   <TouchableOpacity
     onPress={() => router.push("/settings")}
     style={[s.settingsBtn, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
@@ -221,7 +243,7 @@ export default function Home() {
         </View>
         <View style={{ height: 40 }} />
       </ScrollView>
-
+    </SafeScreen>
       {/* Modals */}
       <ScheduleFormModal
         visible={formVisible}
@@ -272,11 +294,23 @@ export default function Home() {
 }
 
 const s = StyleSheet.create({
+  mascotWrap: {
+  width: 46,
+  height: 46,
+  borderRadius: 14,
+  alignItems: "center",
+  justifyContent: "center",
+  overflow: "hidden",
+},
+mascot: {
+  width: 34,
+  height: 34,
+},
+  greetRow:    { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 20, paddingTop: 8 },
+  settingsBtn: { width: 42, height: 42, borderRadius: 21, borderWidth: 0.5, alignItems: "center", justifyContent: "center" },
   screen:       { flex: 1, padding: 16 },
-  greetRow:     { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20, paddingTop: 8 },
   greetSub:     { fontSize: 13 },
   greetName:    { fontSize: 20, fontWeight: "500" },
-  settingsBtn: { width: 42, height: 42, borderRadius: 21, borderWidth: 0.5, alignItems: "center", justifyContent: "center" },
   avatar:       { width: 42, height: 42, borderRadius: 21 },
   avatarFallback:{ width: 42, height: 42, alignItems: "center", justifyContent: "center" },
   avatarTxt:    { fontSize: 14, fontWeight: "600" },

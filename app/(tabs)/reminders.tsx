@@ -6,7 +6,7 @@ import { useTheme } from "../../context/ThemeContext";
 import { API_URL } from "../../constants/apiUrl";
 import { formatDate, isPastDateTime, getTypeColor, getTypeBg } from "../../utils/dateUtils";
 import { ScheduleDetailModal } from "../../components/ScheduleDetailModal";
-
+import { SafeScreen } from "../../components/SafeScreen";
 
 type ScheduleItem = {
   _id: string;
@@ -85,7 +85,7 @@ const openDetail = (item: ScheduleItem) => {
   }
 
   return (
-    
+    <SafeScreen edges={["top"]}>
     <ScrollView
       style={[s.screen, { backgroundColor: bg }]}
       showsVerticalScrollIndicator={false}
@@ -172,6 +172,7 @@ const openDetail = (item: ScheduleItem) => {
 />
       <View style={{ height: 40 }} />
     </ScrollView>
+    </SafeScreen>
   );
 }
 

@@ -50,9 +50,15 @@ export function useNotes() {
     setNotes(newList); setFiltered(newList);
     await noteService.remove(id).catch(() => {});
   };
-
-  return {
-    notes, filtered, loading, refreshing, search,
-    fetch, refresh, handleSearch, create, update, remove,
-  };
+const removeMany = async (ids: string[]) => {
+  // Optimistic update — remove all at once from both lists
+  setNotes(prev => prev.filter(n => !ids.includes(n._id)));
+  setFiltered(prev => prev.filter(n => !ids.includes(n._id)));
+  // Delete from backend in parallel
+  await Promise.all(ids.map(id => noteService.remove(id).catch(() => {})));
+};
+return {
+  notes, filtered, loading, refreshing, search,
+  fetch, refresh, handleSearch, create, update, remove, removeMany,
+};
 }

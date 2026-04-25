@@ -40,6 +40,15 @@ const hts = StyleSheet.create({
 
 export default function TabLayout() {
   const { colors } = useTheme();
+      <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: {
+          height: 70,
+          paddingBottom: 10,
+        },
+      }}
+    />
 
   return (
     <Tabs
@@ -51,12 +60,16 @@ export default function TabLayout() {
           backgroundColor: colors.tabBar,
           borderTopWidth: 0,
           elevation: 8,
-          height: Platform.OS === "ios" ? 88 : 64,
+          height: Platform.OS === "ios" ? 88 : 80,
           paddingBottom: Platform.OS === "ios" ? 24 : 8,
         },
         tabBarLabelStyle: { fontSize: 10, fontWeight: "500" },
       }}
     >
+      <Tabs
+  initialRouteName="home"
+  screenOptions={{ title: "",          tabBarIcon: ({ focused })     => <HomeTabIcon focused={focused} /> }} />
+
       <Tabs.Screen name="courses"   options={{ title: "Courses",   tabBarIcon: ({ color, size }) => <Ionicons name="library-outline"       size={size} color={color} /> }} />
       <Tabs.Screen name="calendar"  options={{ title: "Calendar",  tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline"      size={size} color={color} /> }} />
       <Tabs.Screen name="home"      options={{ title: "",          tabBarIcon: ({ focused })     => <HomeTabIcon focused={focused} /> }} />

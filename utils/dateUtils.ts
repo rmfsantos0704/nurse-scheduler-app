@@ -3,8 +3,12 @@ import { TYPE_COLORS, TYPE_BG } from "../constants/scheduleTypes";
 export const toTimeString = (d: Date) =>
   d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-export const toDateString = (d: Date) =>
-  d.toISOString().split("T")[0];
+export const toDateString = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
 
 export const formatDate = (dateStr: string) => {
   if (!dateStr) return "";
