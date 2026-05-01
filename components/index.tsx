@@ -15,23 +15,33 @@ import { ScheduleCard } from "../../components/ScheduleCard";
 import { ScheduleFormModal } from "../../modals/ScheduleFormModal";
 import { OverviewModal } from "../../modals/OverviewModal";
 import { ScheduleDetailModal } from "../../components/ScheduleDetailModal";
+import { QuoteCard } from "../../components/QuoteCard";
+import { WeeklyChart } from "../../components/WeeklyChart";
+import { CourseChips } from "../../components/CourseChips";
+import { DateStrip } from "../../components/DateStrip";
+import { OverdueBanner } from "../../components/OverdueBanner";
 import { FAB } from "../../components/FAB";
 import { StreakCounter } from "../../components/StreakCounter";
 import { scheduleService, ScheduleItem } from "../../services/scheduleService";
 import { toTimeString, toDateString, buildDateTime, isPastDateTime } from "../../utils/dateUtils";
 import type { ScheduleType } from "../../constants/scheduleTypes";
 import { SafeScreen } from "../../components/SafeScreen";
-import { ScheduleTodayList } from "../../components/ScheduleTodayList";
 
 export default function Home() {
   const MASCOT = require("../../assets/images/notification-icon.png");
-  const { colors, mode } = useTheme();
+  const { colors, scheme, mode } = useTheme();
   const { items, loading, refreshing, fetch, refresh, toggleComplete, remove, stats, nextItem, urgentItems } = useSchedules();
   const { profile, load: loadProfile } = useProfile();
   const { granted: notifGranted } = useNotifications();
   const { courses, fetch: fetchCourses } = useCourses();
   const { streak, markDayComplete } = useStreak();
 
+  // ── New navigation / filter state ─────────────────────────────────────
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [selectedDate,      setSelectedDate]      = useState(todayStr);
+  const [selectedCourseId,  setSelectedCourseId]  = useState<string | null>(null);
+
+  // ── Modal / edit state (unchanged) ────────────────────────────────────
   const [overviewVisible, setOverviewVisible] = useState(false);
   const [overviewCat,     setOverviewCat]     = useState<"total"|"done"|"pending"|"overdue"|null>(null);
   const [detailVisible,   setDetailVisible]   = useState(false);
@@ -41,18 +51,17 @@ export default function Home() {
   const [saving,          setSaving]          = useState(false);
 
   // Form fields — only used for EDIT
-  const [title,          setTitle]          = useState("");
-  const [selectedType,   setSelectedType]   = useState<ScheduleType>("Class");
-  const [description,    setDescription]    = useState("");
-  const [isUrgentForm,   setIsUrgentForm]   = useState(false);
-  const [formDate,       setFormDate]       = useState(new Date());
-  const [formTime,       setFormTime]       = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [remindMinutes,  setRemindMinutes]  = useState(15);
-  const [formCourseId,   setFormCourseId]   = useState<string | null>(null);
+  const [title,            setTitle]            = useState("");
+  const [selectedType,     setSelectedType]     = useState<ScheduleType>("Class");
+  const [description,      setDescription]      = useState("");
+  const [isUrgentForm,     setIsUrgentForm]     = useState(false);
+  const [formDate,         setFormDate]         = useState(new Date());
+  const [formTime,         setFormTime]         = useState(new Date());
+  const [showDatePicker,   setShowDatePicker]   = useState(false);
+  const [showTimePicker,   setShowTimePicker]   = useState(false);
+  const [remindMinutes,    setRemindMinutes]    = useState(15);
+  const [formCourseId,     setFormCourseId]     = useState<string | null>(null);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
   const hour     = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
@@ -62,7 +71,7 @@ export default function Home() {
     fetchCourses();
   }, []));
 
-  // Auto-mark streak when all today's tasks are done
+  // ── Auto-mark streak when all today's tasks are done ──────────────────
   useEffect(() => {
     const todayItems = items.filter(i => i.date === todayStr);
     if (todayItems.length > 0 && todayItems.every(i => i.isCompleted)) {
@@ -70,10 +79,23 @@ export default function Home() {
     }
   }, [items]);
 
+  // ── Derived: dates that have items (for DateStrip dots) ───────────────
+  const activeDates = useMemo(() => [...new Set(items.map(i => i.date).filter(Boolean))], [items]);
+
+  // ── Derived: overdue count ─────────────────────────────────────────────
   const overdueCount = useMemo(
     () => items.filter(i => !i.isCompleted && isPastDateTime(i.date, i.startTime)).length,
     [items]
   );
+
+  // ── Filtered items for schedule list ─────────────────────────────────
+  const filteredItems = useMemo(() => {
+    return items.filter(item => {
+      const dateMatch   = item.date === selectedDate;
+      const courseMatch = selectedCourseId === null || item.courseId === selectedCourseId;
+      return dateMatch && courseMatch;
+    });
+  }, [items, selectedDate, selectedCourseId]);
 
   // ── Edit helpers ──────────────────────────────────────────────────────
   const resetForm = () => {
@@ -106,15 +128,18 @@ export default function Home() {
 
   const openDetail = (item: ScheduleItem) => { setDetailItem(item); setDetailVisible(true); };
 
+  // ── Update ────────────────────────────────────────────────────────────
   const handleUpdate = async () => {
     if (!editingItem || !title.trim()) return;
     setSaving(true);
+    const timeStr = toTimeString(formTime);
+    const dateStr = toDateString(formDate);
     try {
       await scheduleService.update(editingItem._id, {
-        title: title.trim(), type: selectedType,
-        date: toDateString(formDate), startTime: toTimeString(formTime),
-        description: description.trim(), isUrgent: isUrgentForm,
-        courseId: formCourseId, reminderMinutesBefore: remindMinutes,
+        title: title.trim(), type: selectedType, date: dateStr,
+        startTime: timeStr, description: description.trim(),
+        isUrgent: isUrgentForm, courseId: formCourseId,
+        reminderMinutesBefore: remindMinutes,
       });
       await fetch();
       closeForm();
@@ -124,6 +149,7 @@ export default function Home() {
     } finally { setSaving(false); }
   };
 
+  // ── Delete ────────────────────────────────────────────────────────────
   const handleDelete = (item: ScheduleItem) => {
     Alert.alert("Delete", `Remove "${item.title}"?`, [
       { text: "Cancel", style: "cancel" },
@@ -155,24 +181,25 @@ export default function Home() {
             {/* Streak badge */}
             <StreakCounter colors={colors} streak={streak} />
 
-            {/* Search icon → Browse & Filter page */}
-            <TouchableOpacity
-              onPress={() => router.push("/filter")}
-              style={[s.iconBtn, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
-            >
-              <Ionicons name="search-outline" size={20} color={colors.primary} />
-            </TouchableOpacity>
-
-            {/* Settings */}
             <TouchableOpacity
               onPress={() => router.push("/settings")}
-              style={[s.iconBtn, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
+              style={[s.settingsBtn, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
             >
               <Ionicons name="settings-outline" size={20} color={colors.primary} />
             </TouchableOpacity>
           </View>
 
-          {/* Overview cards */}
+          {/* Overdue banner */}
+          <OverdueBanner
+            count={overdueCount}
+            colors={colors}
+            onPress={() => { setOverviewCat("overdue"); setOverviewVisible(true); }}
+          />
+
+          {/* Quote of the day */}
+          <QuoteCard colors={colors} />
+
+          {/* Overview */}
           <Text style={[s.sec, { color: colors.textSecondary }]}>Today's overview</Text>
           <OverviewCards
             {...stats}
@@ -180,7 +207,11 @@ export default function Home() {
             onPress={cat => { setOverviewCat(cat); setOverviewVisible(true); }}
           />
 
-          {/* Next event + Urgent — side by side */}
+          {/* Weekly chart */}
+          <Text style={[s.sec, { color: colors.textSecondary }]}>Weekly activity</Text>
+          <WeeklyChart colors={colors} items={items} />
+
+          {/* Next event + Urgent — side by side 2-column layout */}
           {(nextItem || urgentItems.length > 0) && (
             <View style={s.twoColRow}>
               {nextItem && (
@@ -198,17 +229,83 @@ export default function Home() {
             </View>
           )}
 
-          <Text style={[s.sec, { color: colors.textSecondary }]}>Schedule today</Text>
-<ScheduleTodayList
-  items={items}
-  colors={colors}
-  onOpenDetail={openDetail}
-  onEdit={openEdit}
-  onDelete={handleDelete}
-  onToggleComplete={toggleComplete}
-/>
+          {/* Date strip navigator */}
+          <Text style={[s.sec, { color: colors.textSecondary }]}>Browse days</Text>
+          <DateStrip
+            selectedDate={selectedDate}
+            onSelect={setSelectedDate}
+            colors={colors}
+            activeDates={activeDates as string[]}
+          />
 
-        
+          {/* Course filter chips */}
+          {courses.length > 0 && (
+            <>
+              <Text style={[s.sec, { color: colors.textSecondary }]}>Filter by course</Text>
+              <CourseChips
+                courses={courses}
+                selectedCourseId={selectedCourseId}
+                onSelect={setSelectedCourseId}
+                colors={colors}
+              />
+            </>
+          )}
+
+          {/* Schedule list — filtered by date + course */}
+          <Text style={[s.sec, { color: colors.textSecondary }]}>Schedule</Text>
+          {filteredItems.length === 0 ? (
+            <View style={s.empty}>
+              <Ionicons name="calendar-outline" size={40} color={colors.primary + "66"} />
+              <Text style={[s.emptyTxt, { color: colors.textSecondary }]}>
+                {selectedDate === todayStr ? "No schedules yet" : "Nothing scheduled for this day"}
+              </Text>
+              <TouchableOpacity
+                style={[s.emptyBtn, { backgroundColor: colors.primary }]}
+                onPress={() => router.push("/add-schedule")}
+              >
+                <Text style={s.emptyBtnTxt}>Add a task</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={{ gap: 0 }}>
+              {filteredItems.map((item, idx) => (
+                <TouchableOpacity
+                  key={`${item._id}-${idx}`}
+                  onPress={() => openDetail(item)}
+                  activeOpacity={0.7}
+                >
+                  <ScheduleCard
+                    item={item}
+                    isOverdue={!item.isCompleted && isPastDateTime(item.date, item.startTime)}
+                    onEdit={() => {
+                      if (!item.isCompleted && !isPastDateTime(item.date, item.startTime)) openEdit(item);
+                    }}
+                    onDelete={() => handleDelete(item)}
+                    onToggleComplete={() => toggleComplete(item)}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {/* Quick actions — kept minimal since FAB handles add */}
+          <Text style={[s.sec, { color: colors.textSecondary }]}>Quick actions</Text>
+          <View style={s.quickRow}>
+            <TouchableOpacity
+              style={[s.qBtn, { backgroundColor: colors.card, borderColor: colors.primaryLight }]}
+              onPress={refresh}
+            >
+              <Ionicons name="refresh-outline" size={22} color={colors.primary} />
+              <Text style={[s.qBtnTxt, { color: colors.textPrimary }]}>Refresh</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.qBtn, { backgroundColor: colors.card, borderColor: colors.primaryLight }]}
+              onPress={() => { setSelectedDate(todayStr); setSelectedCourseId(null); }}
+            >
+              <Ionicons name="today-outline" size={22} color={colors.primary} />
+              <Text style={[s.qBtnTxt, { color: colors.textPrimary }]}>Today</Text>
+            </TouchableOpacity>
+          </View>
 
           <View style={{ height: 100 }} />
         </ScrollView>
@@ -268,10 +365,10 @@ export default function Home() {
 
 const s = StyleSheet.create({
   screen:      { flex: 1, padding: 16 },
-  greetRow:    { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16, paddingTop: 8 },
+  greetRow:    { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16, paddingTop: 8 },
   mascotWrap:  { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   mascot:      { width: 34, height: 34 },
-  iconBtn:     { width: 42, height: 42, borderRadius: 21, borderWidth: 0.5, alignItems: "center", justifyContent: "center" },
+  settingsBtn: { width: 42, height: 42, borderRadius: 21, borderWidth: 0.5, alignItems: "center", justifyContent: "center" },
   greetSub:    { fontSize: 13 },
   greetName:   { fontSize: 20, fontWeight: "500" },
   sec:         { fontSize: 11, fontWeight: "500", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 8, marginTop: 8 },

@@ -5,6 +5,8 @@ import {
 import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 import { useTheme } from "../context/ThemeContext";
 import { useCourses } from "../hooks/useCourses";
 import { useNotifications } from "../hooks/useNotification";
@@ -25,15 +27,15 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 const REMIND_OPTIONS = [
-  { label: "5 min", value: 5 },
+  { label: "5 min",  value: 5  },
   { label: "15 min", value: 15 },
   { label: "30 min", value: 30 },
-  { label: "1 hr", value: 60 },
+  { label: "1 hr",   value: 60 },
 ];
 
 export default function AddSchedule() {
   const { colors, scheme } = useTheme();
-  const { courses } = useCourses();
+  const { courses, fetch: fetchCourses } = useCourses();
   const { granted: notifGranted } = useNotifications();
 
   const [title,            setTitle]            = useState("");
@@ -47,6 +49,13 @@ export default function AddSchedule() {
   const [remindMinutes,    setRemindMinutes]    = useState(15);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [saving,           setSaving]           = useState(false);
+
+  // Refresh courses every time screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      fetchCourses();
+    }, [])
+  );
 
   const handleSave = async () => {
     if (!title.trim()) { Alert.alert("Required", "Please enter a title."); return; }
@@ -77,6 +86,8 @@ export default function AddSchedule() {
       setSaving(false);
     }
   };
+
+  const selectedCourse = courses.find(c => c._id === selectedCourseId);
 
   return (
     <SafeScreen edges={["top", "bottom"]}>
@@ -112,9 +123,77 @@ export default function AddSchedule() {
           onChangeText={setTitle}
         />
 
+        {/* Course — moved up so it's easy to set context first */}
+        {courses.length > 0 && (
+          <>
+            <Text style={[s.label, { color: colors.textSecondary }]}>Course</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chipRow}>
+              {/* None chip */}
+              <TouchableOpacity
+                onPress={() => setSelectedCourseId(null)}
+                style={[s.courseChip, {
+                  backgroundColor: selectedCourseId === null ? colors.primary + "22" : colors.card,
+                  borderColor:     selectedCourseId === null ? colors.primary : colors.cardBorder,
+                }]}
+              >
+                <Text style={[s.courseChipTxt, { color: selectedCourseId === null ? colors.primary : colors.textSecondary }]}>
+                  None
+                </Text>
+              </TouchableOpacity>
+
+              {courses.map(c => {
+                const isActive = selectedCourseId === c._id;
+                const chipColor = c.color || colors.primary;
+                return (
+                  <TouchableOpacity
+                    key={c._id}
+                    onPress={() => setSelectedCourseId(isActive ? null : c._id)}
+                    style={[s.courseChip, {
+                      backgroundColor: isActive ? chipColor + "22" : colors.card,
+                      borderColor:     isActive ? chipColor : colors.cardBorder,
+                    }]}
+                  >
+                    {/* Color dot */}
+                    <View style={[s.courseDot, { backgroundColor: chipColor }]} />
+                    <View>
+                      {c.code ? (
+                        <>
+                          <Text style={[s.courseChipCode, { color: isActive ? chipColor : colors.textPrimary }]}>
+                            {c.code}
+                          </Text>
+                          <Text style={[s.courseChipName, { color: isActive ? chipColor + "bb" : colors.textSecondary }]}>
+                            {c.name}
+                          </Text>
+                        </>
+                      ) : (
+                        <Text style={[s.courseChipCode, { color: isActive ? chipColor : colors.textPrimary }]}>
+                          {c.name}
+                        </Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* Selected course banner */}
+            {selectedCourse && (
+              <View style={[s.selectedBanner, { backgroundColor: (selectedCourse.color || colors.primary) + "18", borderColor: (selectedCourse.color || colors.primary) + "44" }]}>
+                <View style={[s.courseDot, { backgroundColor: selectedCourse.color || colors.primary }]} />
+                <Text style={[s.selectedBannerTxt, { color: selectedCourse.color || colors.primary }]}>
+                  {selectedCourse.code ? `${selectedCourse.code} — ${selectedCourse.name}` : selectedCourse.name}
+                </Text>
+                <TouchableOpacity onPress={() => setSelectedCourseId(null)} style={s.clearBtn}>
+                  <Ionicons name="close-circle" size={16} color={selectedCourse.color || colors.primary} />
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
+        )}
+
         {/* Type */}
         <Text style={[s.label, { color: colors.textSecondary }]}>Type</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.typeRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chipRow}>
           {TYPES.map(t => {
             const active = selectedType === t;
             const col    = TYPE_COLORS[t] ?? colors.primary;
@@ -174,33 +253,6 @@ export default function AddSchedule() {
             onChange={(_, t) => { setShowTimePicker(false); if (t) setSelectedTime(t); }}
           />
         )}
-
-        {/* Description */}
-        <Text style={[s.label, { color: colors.textSecondary }]}>Description</Text>
-        <TextInput
-          style={[s.input, s.multiline, { backgroundColor: colors.card, borderColor: colors.cardBorder, color: colors.textPrimary }]}
-          placeholder="Optional notes..."
-          placeholderTextColor={colors.textSecondary}
-          value={description}
-          onChangeText={setDescription}
-          multiline
-          numberOfLines={3}
-        />
-
-        {/* Urgent */}
-        <View style={[s.switchRow, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={[s.switchLabel, { color: colors.textPrimary }]}>Mark as urgent</Text>
-            <Text style={[s.switchSub, { color: colors.textSecondary }]}>Highlights this item for attention</Text>
-          </View>
-          <Switch
-            value={isUrgent}
-            onValueChange={setIsUrgent}
-            trackColor={{ false: colors.cardBorder, true: colors.primary }}
-            thumbColor="#fff"
-          />
-        </View>
-
         {/* Reminder */}
         {notifGranted && (
           <>
@@ -223,40 +275,33 @@ export default function AddSchedule() {
             </View>
           </>
         )}
+        {/* Description */}
+        <Text style={[s.label, { color: colors.textSecondary }]}>Description</Text>
+        <TextInput
+          style={[s.input, s.multiline, { backgroundColor: colors.card, borderColor: colors.cardBorder, color: colors.textPrimary }]}
+          placeholder="Optional notes..."
+          placeholderTextColor={colors.textSecondary}
+          value={description}
+          onChangeText={setDescription}
+          multiline
+          numberOfLines={3}
+        />
 
-        {/* Course */}
-        {courses.length > 0 && (
-          <>
-            <Text style={[s.label, { color: colors.textSecondary }]}>Linked course</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.typeRow}>
-              <TouchableOpacity
-                onPress={() => setSelectedCourseId(null)}
-                style={[s.typeChip, {
-                  backgroundColor: selectedCourseId === null ? colors.primary : colors.card,
-                  borderColor:     selectedCourseId === null ? colors.primary : colors.cardBorder,
-                }]}
-              >
-                <Text style={[s.typeChipTxt, { color: selectedCourseId === null ? "#fff" : colors.textSecondary }]}>
-                  None
-                </Text>
-              </TouchableOpacity>
-              {courses.map(c => (
-                <TouchableOpacity
-                  key={c._id}
-                  onPress={() => setSelectedCourseId(c._id)}
-                  style={[s.typeChip, {
-                    backgroundColor: selectedCourseId === c._id ? c.color : colors.card,
-                    borderColor:     selectedCourseId === c._id ? c.color : colors.cardBorder,
-                  }]}
-                >
-                  <Text style={[s.typeChipTxt, { color: selectedCourseId === c._id ? "#fff" : colors.textSecondary }]}>
-                    {c.code || c.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </>
-        )}
+        {/* Urgent */}
+        <View style={[s.switchRow, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={[s.switchLabel, { color: colors.textPrimary }]}>Mark as urgent</Text>
+            <Text style={[s.switchSub,   { color: colors.textSecondary }]}>Highlights this item for attention</Text>
+          </View>
+          <Switch
+            value={isUrgent}
+            onValueChange={setIsUrgent}
+            trackColor={{ false: colors.cardBorder, true: colors.primary }}
+            thumbColor="#fff"
+          />
+        </View>
+
+      
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -265,24 +310,34 @@ export default function AddSchedule() {
 }
 
 const s = StyleSheet.create({
-  screen:       { flex: 1, padding: 16 },
-  header:       { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 0.5 },
-  backBtn:      { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  headerTitle:  { flex: 1, fontSize: 17, fontWeight: "600" },
-  saveBtn:      { borderRadius: 20, paddingHorizontal: 18, paddingVertical: 8, minWidth: 64, alignItems: "center" },
-  saveBtnTxt:   { color: "#fff", fontSize: 14, fontWeight: "500" },
-  label:        { fontSize: 12, fontWeight: "500", marginBottom: 6, marginTop: 12 },
-  input:        { borderWidth: 0.5, borderRadius: 10, padding: 12, fontSize: 14, marginBottom: 2 },
-  multiline:    { minHeight: 80, textAlignVertical: "top" },
-  inputRow:     { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 0.5, borderRadius: 10, padding: 12, marginBottom: 2 },
-  inputRowTxt:  { fontSize: 14, flex: 1 },
-  typeRow:      { marginBottom: 4 },
-  typeChip:     { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7, marginRight: 8 },
-  typeChipTxt:  { fontSize: 13, fontWeight: "500" },
-  switchRow:    { flexDirection: "row", alignItems: "center", borderWidth: 0.5, borderRadius: 12, padding: 14, marginTop: 12 },
-  switchLabel:  { fontSize: 14, fontWeight: "500" },
-  switchSub:    { fontSize: 12, marginTop: 2 },
-  remindRow:    { flexDirection: "row", gap: 8, marginBottom: 4 },
-  remindChip:   { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
-  remindChipTxt:{ fontSize: 13, fontWeight: "500" },
+  screen:           { flex: 1, padding: 16 },
+  header:           { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 0.5 },
+  backBtn:          { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  headerTitle:      { flex: 1, fontSize: 17, fontWeight: "600" },
+  saveBtn:          { borderRadius: 20, paddingHorizontal: 18, paddingVertical: 8, minWidth: 64, alignItems: "center" },
+  saveBtnTxt:       { color: "#fff", fontSize: 14, fontWeight: "500" },
+  label:            { fontSize: 12, fontWeight: "500", marginBottom: 6, marginTop: 12 },
+  input:            { borderWidth: 0.5, borderRadius: 10, padding: 12, fontSize: 14, marginBottom: 2 },
+  multiline:        { minHeight: 80, textAlignVertical: "top" },
+  inputRow:         { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 0.5, borderRadius: 10, padding: 12, marginBottom: 2 },
+  inputRowTxt:      { fontSize: 14, flex: 1 },
+  chipRow:          { marginBottom: 4 },
+  // Course chips — taller to fit code + name
+  courseChip:       { flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginRight: 8 },
+  courseDot:        { width: 8, height: 8, borderRadius: 4 },
+  courseChipCode:   { fontSize: 13, fontWeight: "600" },
+  courseChipName:   { fontSize: 11, marginTop: 1 },
+  courseChipTxt:    { fontSize: 13, fontWeight: "500" },
+  selectedBanner:   { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 0.5, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginTop: 8 },
+  selectedBannerTxt:{ flex: 1, fontSize: 13, fontWeight: "500" },
+  clearBtn:         { padding: 2 },
+  // Type chips
+  typeChip:         { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7, marginRight: 8 },
+  typeChipTxt:      { fontSize: 13, fontWeight: "500" },
+  switchRow:        { flexDirection: "row", alignItems: "center", borderWidth: 0.5, borderRadius: 12, padding: 14, marginTop: 12 },
+  switchLabel:      { fontSize: 14, fontWeight: "500" },
+  switchSub:        { fontSize: 12, marginTop: 2 },
+  remindRow:        { flexDirection: "row", gap: 8, marginBottom: 4 },
+  remindChip:       { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
+  remindChipTxt:    { fontSize: 13, fontWeight: "500" },
 });
