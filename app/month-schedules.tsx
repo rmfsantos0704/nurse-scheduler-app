@@ -1,3 +1,4 @@
+// app/month-schedules.tsx
 import {
   View, Text, StyleSheet, TouchableOpacity,
   TextInput, FlatList, Platform, ActivityIndicator,
@@ -34,31 +35,37 @@ const SORTS: { key: SortKey; label: string }[] = [
   { key: "type",      label: "Type"   },
 ];
 
-// ── Core fix ─────────────────────────────────────────────────────────────────
-// Previously: isPastDateTime checked against NOW, so any completed item with a
-// past scheduled time was incorrectly flagged as "done-late" — even if the user
-// completed it before the deadline.
-//
-// Now: we compare completedAt (when the user actually tapped complete) against
-// the scheduled datetime. Only if completedAt > scheduled = truly done late.
-// Legacy items without completedAt fall back to "done" (benefit of the doubt).
-// ─────────────────────────────────────────────────────────────────────────────
 function getStatus(item: ScheduleItem): FilterKey {
   if (!item.isCompleted) {
     return isPastDateTime(item.date, item.startTime) ? "overdue" : "pending";
   }
-  // Completed — check if it was finished after the deadline
   if (item.completedAt) {
     const scheduled = buildDateTime(item.date, item.startTime);
     const completed = new Date(item.completedAt);
     return completed > scheduled ? "done-late" : "done";
   }
-  // No completedAt recorded (data created before this update) — treat as done
   return "done";
 }
 
+// ✅ Shared helper — dark mode pill styles derived from the type color
+function getTypePillStyles(
+  typeColor: string,
+  typeBg: string,
+  mode: string
+): { bg: string; text: string; borderColor?: string; hasBorder: boolean } {
+  if (mode === "dark") {
+    return {
+      bg:          typeColor + "30",  // ~19% opacity tint on dark surface
+      text:        typeColor,         // vivid type color for readability
+      borderColor: typeColor + "60",  // subtle outline to define the pill edge
+      hasBorder:   true,
+    };
+  }
+  return { bg: typeBg, text: typeColor, hasBorder: false };
+}
+
 export default function MonthSchedules() {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme(); // 👈 pull in mode
   const params = useLocalSearchParams<{ month: string; year: string }>();
   const month  = parseInt(params.month ?? "0");
   const year   = parseInt(params.year  ?? String(new Date().getFullYear()));
@@ -86,7 +93,6 @@ export default function MonthSchedules() {
     finally { setLoading(false); }
   };
 
-  // ── Filtered + sorted list ─────────────────────────────────────────────────
   const displayed = useMemo(() => {
     let list = [...items];
 
@@ -118,7 +124,6 @@ export default function MonthSchedules() {
     return list;
   }, [items, search, activeFilter, activeSort]);
 
-  // ── Group by date ──────────────────────────────────────────────────────────
   const grouped = useMemo(() => {
     const map: Record<string, ScheduleItem[]> = {};
     for (const item of displayed) {
@@ -130,7 +135,6 @@ export default function MonthSchedules() {
     );
   }, [displayed, activeSort]);
 
-  // Flatten for FlatList with date headers
   type Row = { type: "header"; date: string } | { type: "item"; item: ScheduleItem };
   const rows: Row[] = useMemo(() => {
     if (activeSort === "title" || activeSort === "type") {
@@ -171,11 +175,16 @@ export default function MonthSchedules() {
       );
     }
 
-    const { item } = row;
-    const status   = getStatus(item);
-    const overdue  = status === "overdue";
-    const doneLate = status === "done-late";
+    const { item }  = row;
+    const status    = getStatus(item);
+    const overdue   = status === "overdue";
+    const doneLate  = status === "done-late";
     const cardBorderColor = overdue ? "#E24B4A" : doneLate ? "#7F77DD" : colors.cardBorder;
+
+    // ✅ Compute pill styles once per card using the shared helper
+    const typeColor = getTypeColor(item.type);
+    const typeBg    = getTypeBg(item.type);
+    const pill      = getTypePillStyles(typeColor, typeBg, mode);
 
     return (
       <TouchableOpacity
@@ -192,8 +201,14 @@ export default function MonthSchedules() {
             <Text style={[rs.title, { color: colors.textPrimary }]} numberOfLines={1}>
               {item.title}
             </Text>
-            <View style={[rs.typePill, { backgroundColor: getTypeBg(item.type) }]}>
-              <Text style={[rs.typeTxt, { color: getTypeColor(item.type) }]}>{item.type}</Text>
+
+            {/* ✅ Type pill — dark-mode aware */}
+            <View style={[
+              rs.typePill,
+              { backgroundColor: pill.bg },
+              pill.hasBorder && { borderWidth: 0.5, borderColor: pill.borderColor },
+            ]}>
+              <Text style={[rs.typeTxt, { color: pill.text }]}>{item.type}</Text>
             </View>
           </View>
 
@@ -203,8 +218,15 @@ export default function MonthSchedules() {
             <Text style={[rs.meta, { color: colors.textSecondary }]}>{item.startTime}</Text>
 
             {item.isUrgent && (
-              <View style={rs.urgentPill}>
-                <Text style={rs.urgentTxt}>Urgent</Text>
+              <View style={[
+                rs.urgentPill,
+                // ✅ Urgent pill also gets a dark-mode boost
+                mode === "dark" && { backgroundColor: "rgba(250,199,117,0.2)", borderWidth: 0.5, borderColor: "rgba(250,199,117,0.5)" },
+              ]}>
+                <Text style={[
+                  rs.urgentTxt,
+                  mode === "dark" && { color: "#FAC775" },
+                ]}>Urgent</Text>
               </View>
             )}
 
@@ -358,7 +380,6 @@ export default function MonthSchedules() {
   );
 }
 
-// ── Schedule row styles ────────────────────────────────────────────────────────
 const rs = StyleSheet.create({
   dateHeader: { flexDirection: "row", alignItems: "center", borderLeftWidth: 3, paddingLeft: 10, marginHorizontal: 16, marginTop: 16, marginBottom: 8 },
   dateLabel:  { fontSize: 13, fontWeight: "600" },

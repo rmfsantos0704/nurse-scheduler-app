@@ -1,3 +1,4 @@
+// app/(tabs)/home.tsx
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Image, RefreshControl } from "react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
@@ -40,6 +41,14 @@ export default function Home() {
   const [formVisible,     setFormVisible]     = useState(false);
   const [saving,          setSaving]          = useState(false);
 
+  // ✅ Multi-delete state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set());
+  const [deleting,      setDeleting]      = useState(false);
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayItems = useMemo(() => items.filter(i => i.date === todayStr), [items, todayStr]);
+
   // Form fields — only used for EDIT
   const [title,          setTitle]          = useState("");
   const [selectedType,   setSelectedType]   = useState<ScheduleType>("Class");
@@ -52,7 +61,6 @@ export default function Home() {
   const [remindMinutes,  setRemindMinutes]  = useState(15);
   const [formCourseId,   setFormCourseId]   = useState<string | null>(null);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
   const hour     = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
@@ -62,7 +70,6 @@ export default function Home() {
     fetchCourses();
   }, []));
 
-  // Auto-mark streak when all today's tasks are done
   useEffect(() => {
     const todayItems = items.filter(i => i.date === todayStr);
     if (todayItems.length > 0 && todayItems.every(i => i.isCompleted)) {
@@ -74,6 +81,61 @@ export default function Home() {
     () => items.filter(i => !i.isCompleted && isPastDateTime(i.date, i.startTime)).length,
     [items]
   );
+
+  // ── Selection helpers ─────────────────────────────────────────────────
+  const enterSelectionMode = () => {
+    setSelectionMode(true);
+    setSelectedIds(new Set());
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelect = (id: string) => {
+    // ✅ Auto-enter selection mode on long-press from ScheduleTodayList
+    if (!selectionMode) setSelectionMode(true);
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedIds(new Set(todayItems.map(i => i._id)));
+  };
+
+  const allSelected = todayItems.length > 0 && selectedIds.size === todayItems.length;
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    Alert.alert(
+      "Delete schedules",
+      `Permanently delete ${selectedIds.size} schedule${selectedIds.size > 1 ? "s" : ""}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              // ✅ Delete all selected in parallel
+              await Promise.all([...selectedIds].map(id => scheduleService.remove(id)));
+              await fetch();
+              exitSelectionMode();
+            } catch {
+              Alert.alert("Error", "Some items could not be deleted.");
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // ── Edit helpers ──────────────────────────────────────────────────────
   const resetForm = () => {
@@ -152,10 +214,8 @@ export default function Home() {
               <Text style={[s.greetName, { color: colors.textPrimary }]}>SnowEd</Text>
             </View>
 
-            {/* Streak badge */}
             <StreakCounter colors={colors} streak={streak} />
 
-            {/* Search icon → Browse & Filter page */}
             <TouchableOpacity
               onPress={() => router.push("/filter")}
               style={[s.iconBtn, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
@@ -163,7 +223,6 @@ export default function Home() {
               <Ionicons name="search-outline" size={20} color={colors.primary} />
             </TouchableOpacity>
 
-            {/* Settings */}
             <TouchableOpacity
               onPress={() => router.push("/settings")}
               style={[s.iconBtn, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
@@ -180,7 +239,7 @@ export default function Home() {
             onPress={cat => { setOverviewCat(cat); setOverviewVisible(true); }}
           />
 
-          {/* Next event + Urgent — side by side */}
+          {/* Next event + Urgent */}
           {(nextItem || urgentItems.length > 0) && (
             <View style={s.twoColRow}>
               {nextItem && (
@@ -198,26 +257,84 @@ export default function Home() {
             </View>
           )}
 
-          <Text style={[s.sec, { color: colors.textSecondary }]}>Schedule today</Text>
-<ScheduleTodayList
-  items={items}
-  colors={colors}
-  onOpenDetail={openDetail}
-  onEdit={openEdit}
-  onDelete={handleDelete}
-  onToggleComplete={toggleComplete}
-/>
+          {/* ── SCHEDULE TODAY HEADER ── */}
+          <View style={s.secRow}>
+            <Text style={[s.sec, { color: colors.textSecondary, marginBottom: 0, marginTop: 0 }]}>
+              Schedule today
+            </Text>
 
-        
+            <View style={s.secActions}>
+              {selectionMode ? (
+                <>
+                  {/* Select all toggle */}
+                  <TouchableOpacity
+                    onPress={allSelected ? exitSelectionMode : selectAll}
+                    style={[s.secBtn, { borderColor: colors.cardBorder, backgroundColor: colors.card }]}
+                  >
+                    <Ionicons
+                      name={allSelected ? "checkbox-outline" : "square-outline"}
+                      size={14}
+                      color={colors.textSecondary}
+                    />
+                    <Text style={[s.secBtnTxt, { color: colors.textSecondary }]}>
+                      {allSelected ? "Deselect all" : "Select all"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Delete selected */}
+                  <TouchableOpacity
+                    onPress={handleBulkDelete}
+                    disabled={selectedIds.size === 0 || deleting}
+                    style={[
+                      s.secBtn,
+                      { borderColor: "#E24B4A", backgroundColor: "#FCEBEB" },
+                      (selectedIds.size === 0 || deleting) && { opacity: 0.4 },
+                    ]}
+                  >
+                    <Ionicons name="trash-outline" size={14} color="#E24B4A" />
+                    <Text style={[s.secBtnTxt, { color: "#E24B4A" }]}>
+                      {deleting ? "Deleting..." : `Delete${selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}`}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Cancel */}
+                  <TouchableOpacity onPress={exitSelectionMode} style={s.cancelBtn}>
+                    <Ionicons name="close" size={18} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                </>
+              ) : (
+                /* ✅ Entry point — only shown when there are today's items */
+                todayItems.length > 0 && (
+                  <TouchableOpacity
+                    onPress={enterSelectionMode}
+                    style={[s.secBtn, { borderColor: colors.cardBorder, backgroundColor: colors.card }]}
+                  >
+                    <Ionicons name="trash-outline" size={14} color={colors.textSecondary} />
+                    <Text style={[s.secBtnTxt, { color: colors.textSecondary }]}>Select</Text>
+                  </TouchableOpacity>
+                )
+              )}
+            </View>
+          </View>
+
+          <ScheduleTodayList
+            items={items}
+            colors={colors}
+            onOpenDetail={openDetail}
+            onEdit={openEdit}
+            onDelete={handleDelete}
+            onToggleComplete={toggleComplete}
+            selectionMode={selectionMode}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+          />
 
           <View style={{ height: 100 }} />
         </ScrollView>
 
-        {/* FAB */}
         <FAB onPress={() => router.push("/add-schedule")} color={colors.primary} />
       </SafeScreen>
 
-      {/* Edit modal */}
       <ScheduleFormModal
         visible={formVisible}
         onClose={closeForm}
@@ -275,6 +392,12 @@ const s = StyleSheet.create({
   greetSub:    { fontSize: 13 },
   greetName:   { fontSize: 20, fontWeight: "500" },
   sec:         { fontSize: 11, fontWeight: "500", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 8, marginTop: 8 },
+  // ✅ Section header row — label + action buttons side by side
+  secRow:      { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8, marginTop: 8 },
+  secActions:  { flexDirection: "row", alignItems: "center", gap: 6 },
+  secBtn:      { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 0.5, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
+  secBtnTxt:   { fontSize: 11, fontWeight: "500" },
+  cancelBtn:   { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   twoColRow:   { flexDirection: "row", gap: 10, alignItems: "flex-start" },
   twoColItem:  { flex: 1, minWidth: 0 },
   empty:       { alignItems: "center", paddingVertical: 40, gap: 10 },

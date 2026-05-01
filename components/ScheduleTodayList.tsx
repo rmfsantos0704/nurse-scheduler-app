@@ -1,71 +1,109 @@
 // components/ScheduleTodayList.tsx
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
 import { ScheduleCard } from "./ScheduleCard";
 import { ScheduleItem } from "../services/scheduleService";
 import { isPastDateTime } from "../utils/dateUtils";
 
-interface ScheduleTodayListProps {
+type Props = {
   items: ScheduleItem[];
   colors: any;
   onOpenDetail: (item: ScheduleItem) => void;
   onEdit: (item: ScheduleItem) => void;
   onDelete: (item: ScheduleItem) => void;
-  onToggleComplete: (item: ScheduleItem) => void;
-  emptyLabel?: string;
-}
+  onToggleComplete: (id: string) => void;
+  selectionMode: boolean;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+};
 
 export function ScheduleTodayList({
-  items,
-  colors,
-  onOpenDetail,
-  onEdit,
-  onDelete,
-  onToggleComplete,
-  emptyLabel = "No schedules yet",
-}: ScheduleTodayListProps) {
-  if (items.length === 0) {
+  items, colors,
+  onOpenDetail, onEdit, onDelete, onToggleComplete,
+  selectionMode, selectedIds, onToggleSelect,
+}: Props) {
+  const todayStr   = new Date().toISOString().slice(0, 10);
+  const todayItems = items.filter(i => i.date === todayStr);
+
+  if (todayItems.length === 0) {
     return (
       <View style={s.empty}>
-        <Ionicons name="calendar-outline" size={40} color={colors.primary + "66"} />
-        <Text style={[s.emptyTxt, { color: colors.textSecondary }]}>{emptyLabel}</Text>
-        <TouchableOpacity
-          style={[s.emptyBtn, { backgroundColor: colors.primary }]}
-          onPress={() => router.push("/add-schedule")}
-        >
-          <Text style={s.emptyBtnTxt}>Add your first task</Text>
-        </TouchableOpacity>
+        <Ionicons name="calendar-outline" size={36} color={colors.primary + "55"} />
+        <Text style={[s.emptyTxt, { color: colors.textSecondary }]}>No schedules for today</Text>
       </View>
     );
   }
 
   return (
-    <View style={{ gap: 0 }}>
-      {items.map((item, idx) => (
-        <TouchableOpacity
-          key={`${item._id}-${idx}`}
-          onPress={() => onOpenDetail(item)}
-          activeOpacity={0.7}
-        >
-          <ScheduleCard
-            item={item}
-            isOverdue={!item.isCompleted && isPastDateTime(item.date, item.startTime)}
-            onEdit={() => {
-              if (!item.isCompleted && !isPastDateTime(item.date, item.startTime)) onEdit(item);
-            }}
-            onDelete={() => onDelete(item)}
-            onToggleComplete={() => onToggleComplete(item)}
-          />
-        </TouchableOpacity>
-      ))}
+    <View>
+      {todayItems.map(item => {
+        const isOverdue  = !item.isCompleted && isPastDateTime(item.date, item.startTime);
+        const isSelected = selectedIds.has(item._id);
+
+        return (
+          // ✅ Outer wrapper handles ALL taps in both modes
+          <TouchableOpacity
+            key={item._id}
+            activeOpacity={0.75}
+            onPress={() => selectionMode ? onToggleSelect(item._id) : onOpenDetail(item)}
+            onLongPress={() => onToggleSelect(item._id)}
+            delayLongPress={300}
+          >
+            {/* ✅ Row wraps checkbox + card side by side — no overlap/clipping */}
+            <View style={[
+              s.row,
+              isSelected && { backgroundColor: colors.primary + "12", borderRadius: 12 },
+            ]}>
+
+              {/* Checkbox — only rendered in selection mode */}
+              {selectionMode && (
+                <View style={[
+                  s.checkbox,
+                  {
+                    backgroundColor: isSelected ? colors.primary : "transparent",
+                    borderColor:     isSelected ? colors.primary : colors.textSecondary,
+                  },
+                ]}>
+                  {isSelected && <Ionicons name="checkmark" size={12} color="#fff" />}
+                </View>
+              )}
+
+              {/* Card — fills remaining space; actions disabled in selection mode */}
+              <View style={{ flex: 1 }}>
+                <ScheduleCard
+                  item={item}
+                  onEdit={selectionMode ? () => {} : () => onEdit(item)}
+                  onDelete={selectionMode ? () => {} : () => onDelete(item)}
+                  onToggleComplete={selectionMode ? () => {} : () => onToggleComplete(item._id)}
+                  isOverdue={isOverdue}
+                />
+              </View>
+            </View>
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  empty:       { alignItems: "center", paddingVertical: 40, gap: 10 },
-  emptyTxt:    { fontSize: 14 },
-  emptyBtn:    { borderRadius: 20, paddingHorizontal: 20, paddingVertical: 10 },
-  emptyBtnTxt: { color: "#fff", fontSize: 13, fontWeight: "500" },
+  empty:    { alignItems: "center", paddingVertical: 40, gap: 10 },
+  emptyTxt: { fontSize: 14 },
+  // ✅ Checkbox and card sit side by side in a row — no absolute positioning
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 2,
+    paddingLeft: 4,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
 });
