@@ -4,9 +4,9 @@ import { toDateString, isPastDateTime } from "../utils/dateUtils";
 import { cancelNotification } from "../services/NotificationService";
 
 export function useSchedules() {
-  const [items, setItems]       = useState<ScheduleItem[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [items,     setItems]     = useState<ScheduleItem[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [refreshing,setRefreshing]= useState(false);
 
   const today = toDateString(new Date());
 
@@ -27,13 +27,25 @@ export function useSchedules() {
 
   const refresh = () => { setRefreshing(true); fetch(); };
 
-  const toggleComplete = async (item: ScheduleItem) => {
-    const updated = { ...item, isCompleted: !item.isCompleted };
+const toggleComplete = async (item: ScheduleItem) => {
+    const nowCompleting = !item.isCompleted;
+    
+    // ✅ NEW: Capture timestamp immediately
+    const completedAt = nowCompleting ? new Date().toISOString() : null;
+
+    const updated: ScheduleItem = { ...item, isCompleted: nowCompleting, completedAt };
+    
+    // Optimistic Update
     setItems(prev => prev.map(i => i._id === item._id ? updated : i));
+
     try {
-      await scheduleService.update(item._id, { isCompleted: updated.isCompleted });
-      if (updated.isCompleted) await cancelNotification(item._id);
+      await scheduleService.update(item._id, {
+        isCompleted: nowCompleting,
+        completedAt: completedAt ?? undefined, // Pass the same timestamp to DB
+      });
+      if (nowCompleting) await cancelNotification(item._id);
     } catch {
+      // Roll back
       setItems(prev => prev.map(i => i._id === item._id ? item : i));
     }
   };
@@ -54,7 +66,7 @@ export function useSchedules() {
       : 0,
   };
 
-  const nextItem  = items.find(i => !i.isCompleted);
+  const nextItem    = items.find(i => !i.isCompleted);
   const urgentItems = items.filter(i => i.isUrgent && !i.isCompleted);
 
   return {

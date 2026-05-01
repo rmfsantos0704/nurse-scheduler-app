@@ -1,3 +1,4 @@
+// utils/dateUtils.ts
 import { TYPE_COLORS, TYPE_BG } from "../constants/scheduleTypes";
 
 export const toTimeString = (d: Date) =>
@@ -31,18 +32,18 @@ export const buildDateTime = (dateStr: string, timeStr: string): Date => {
   return new Date(year, month - 1, day, hours, minutes);
 };
 
-export const isPastDateTime = (dateStr: string, timeStr: string) => {
+// ✅ UPDATED: Added completionTime parameter
+export const isPastDateTime = (
+  dateStr: string, 
+  timeStr: string, 
+  completionTime: string | null = null
+) => {
   if (!dateStr || !timeStr) return false;
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const cleaned = timeStr.replace(/\./g, ":").trim();
-  const match = cleaned.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
-  if (!match) return false;
-  let hours = parseInt(match[1]);
-  const minutes = parseInt(match[2]);
-  const ampm = match[3]?.toUpperCase();
-  if (ampm === "PM" && hours < 12) hours += 12;
-  if (ampm === "AM" && hours === 12) hours = 0;
-  return new Date(y, m - 1, d, hours, minutes) < new Date();
+  
+  const deadline = buildDateTime(dateStr, timeStr);
+  const comparisonTime = completionTime ? new Date(completionTime) : new Date();
+  
+  return deadline < comparisonTime;
 };
 
 export const getTypeColor = (type: string): string => {

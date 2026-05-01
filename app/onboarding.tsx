@@ -8,7 +8,8 @@ import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { FlatList } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { API_URL } from "../constants/apiUrl";
+import { courseService } from "../services/courseService";
+import { initDb } from "../database/db";
 
 const { width, height } = Dimensions.get("window");
 const APP_ICON = require("../assets/images/icon.png");
@@ -85,13 +86,10 @@ export default function Onboarding() {
       ["themeScheme",    scheme],
       ["themeMode",      mode],
     ]);
-    for (const c of onboardingCourses) {
-      await fetch(`${API_URL}/courses`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(c),
-      }).catch(() => {});
-    }
+    await initDb();
+for (const c of onboardingCourses) {
+  await courseService.create(c).catch(() => {});
+}
     router.replace("/(tabs)/home");
   };
 

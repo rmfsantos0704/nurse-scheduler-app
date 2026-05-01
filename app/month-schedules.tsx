@@ -9,7 +9,7 @@ import { useTheme } from "../context/ThemeContext";
 import { scheduleService, ScheduleItem } from "../services/scheduleService";
 import { ScheduleDetailModal } from "../components/ScheduleDetailModal";
 import { SafeScreen } from "../components/SafeScreen";
-import { isPastDateTime, getTypeColor, getTypeBg } from "../utils/dateUtils";
+import { isPastDateTime, getTypeColor, getTypeBg, buildDateTime } from "../utils/dateUtils";
 
 const MONTHS = [
   "January","February","March","April","May","June",
@@ -28,18 +28,33 @@ const FILTERS: { key: FilterKey; label: string; color: string }[] = [
 ];
 
 const SORTS: { key: SortKey; label: string }[] = [
-  { key: "date-asc",  label: "Date ↑"  },
-  { key: "date-desc", label: "Date ↓"  },
-  { key: "title",     label: "Title"   },
-  { key: "type",      label: "Type"    },
+  { key: "date-asc",  label: "Date ↑" },
+  { key: "date-desc", label: "Date ↓" },
+  { key: "title",     label: "Title"  },
+  { key: "type",      label: "Type"   },
 ];
 
+// ── Core fix ─────────────────────────────────────────────────────────────────
+// Previously: isPastDateTime checked against NOW, so any completed item with a
+// past scheduled time was incorrectly flagged as "done-late" — even if the user
+// completed it before the deadline.
+//
+// Now: we compare completedAt (when the user actually tapped complete) against
+// the scheduled datetime. Only if completedAt > scheduled = truly done late.
+// Legacy items without completedAt fall back to "done" (benefit of the doubt).
+// ─────────────────────────────────────────────────────────────────────────────
 function getStatus(item: ScheduleItem): FilterKey {
-  const past = isPastDateTime(item.date, item.startTime);
-  if (item.isCompleted && past)  return "done-late";
-  if (item.isCompleted)          return "done";
-  if (past)                      return "overdue";
-  return "pending";
+  if (!item.isCompleted) {
+    return isPastDateTime(item.date, item.startTime) ? "overdue" : "pending";
+  }
+  // Completed — check if it was finished after the deadline
+  if (item.completedAt) {
+    const scheduled = buildDateTime(item.date, item.startTime);
+    const completed = new Date(item.completedAt);
+    return completed > scheduled ? "done-late" : "done";
+  }
+  // No completedAt recorded (data created before this update) — treat as done
+  return "done";
 }
 
 export default function MonthSchedules() {
@@ -57,9 +72,7 @@ export default function MonthSchedules() {
   const [detailItem,    setDetailItem]    = useState<ScheduleItem | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
 
-  useEffect(() => {
-    loadItems();
-  }, [month, year]);
+  useEffect(() => { loadItems(); }, [month, year]);
 
   const loadItems = async () => {
     try {
@@ -73,26 +86,25 @@ export default function MonthSchedules() {
     finally { setLoading(false); }
   };
 
-  // ── Filtered + sorted list ────────────────────────────────────────────
+  // ── Filtered + sorted list ─────────────────────────────────────────────────
   const displayed = useMemo(() => {
     let list = [...items];
 
-    // Search
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(i =>
         i.title.toLowerCase().includes(q) ||
         (i.description ?? "").toLowerCase().includes(q) ||
-        i.type.toLowerCase().includes(q)
+        i.type.toLowerCase().includes(q) ||
+        (i.code  ?? "").toLowerCase().includes(q) ||
+        (i.color ?? "").toLowerCase().includes(q)
       );
     }
 
-    // Filter
     if (activeFilter !== "all") {
       list = list.filter(i => getStatus(i) === activeFilter);
     }
 
-    // Sort
     list.sort((a, b) => {
       switch (activeSort) {
         case "date-asc":  return a.date.localeCompare(b.date) || (a.startTime ?? "").localeCompare(b.startTime ?? "");
@@ -106,7 +118,7 @@ export default function MonthSchedules() {
     return list;
   }, [items, search, activeFilter, activeSort]);
 
-  // ── Group by date ─────────────────────────────────────────────────────
+  // ── Group by date ──────────────────────────────────────────────────────────
   const grouped = useMemo(() => {
     const map: Record<string, ScheduleItem[]> = {};
     for (const item of displayed) {
@@ -122,7 +134,6 @@ export default function MonthSchedules() {
   type Row = { type: "header"; date: string } | { type: "item"; item: ScheduleItem };
   const rows: Row[] = useMemo(() => {
     if (activeSort === "title" || activeSort === "type") {
-      // No grouping for these sorts
       return displayed.map(item => ({ type: "item" as const, item }));
     }
     const result: Row[] = [];
@@ -133,7 +144,16 @@ export default function MonthSchedules() {
     return result;
   }, [grouped, displayed, activeSort]);
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const now      = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+  const statusColor: Record<FilterKey, string> = {
+    all:        colors.primary,
+    pending:    "#BA7517",
+    done:       "#639922",
+    overdue:    "#E24B4A",
+    "done-late":"#7F77DD",
+  };
 
   const renderRow = ({ item: row }: { item: Row }) => {
     if (row.type === "header") {
@@ -152,17 +172,9 @@ export default function MonthSchedules() {
     }
 
     const { item } = row;
-    const status  = getStatus(item);
-    const overdue = status === "overdue";
+    const status   = getStatus(item);
+    const overdue  = status === "overdue";
     const doneLate = status === "done-late";
-
-    const statusColor: Record<FilterKey, string> = {
-      "all":       colors.primary,
-      "pending":   "#BA7517",
-      "done":      "#639922",
-      "overdue":   "#E24B4A",
-      "done-late": "#7F77DD",
-    };
     const cardBorderColor = overdue ? "#E24B4A" : doneLate ? "#7F77DD" : colors.cardBorder;
 
     return (
@@ -171,7 +183,7 @@ export default function MonthSchedules() {
         onPress={() => { setDetailItem(item); setDetailVisible(true); }}
         activeOpacity={0.75}
       >
-        {/* Left accent */}
+        {/* Left accent bar */}
         <View style={[rs.accent, { backgroundColor: statusColor[status] }]} />
 
         <View style={rs.cardBody}>
@@ -185,7 +197,7 @@ export default function MonthSchedules() {
             </View>
           </View>
 
-          {/* Meta */}
+          {/* Meta row */}
           <View style={rs.metaRow}>
             <Ionicons name="time-outline" size={12} color={colors.textSecondary} />
             <Text style={[rs.meta, { color: colors.textSecondary }]}>{item.startTime}</Text>
@@ -230,9 +242,11 @@ export default function MonthSchedules() {
             {items.length} schedule{items.length !== 1 ? "s" : ""}
           </Text>
         </View>
-        {/* Sort button */}
         <TouchableOpacity
-          style={[s.sortBtn, { backgroundColor: sortOpen ? colors.primaryLight : colors.card, borderColor: colors.cardBorder }]}
+          style={[s.sortBtn, {
+            backgroundColor: sortOpen ? colors.primaryLight : colors.card,
+            borderColor: colors.cardBorder,
+          }]}
           onPress={() => setSortOpen(v => !v)}
         >
           <Ionicons name="funnel-outline" size={16} color={sortOpen ? colors.primary : colors.textPrimary} />
@@ -249,7 +263,10 @@ export default function MonthSchedules() {
               style={[s.sortOption, { borderBottomColor: colors.cardBorder }]}
               onPress={() => { setActiveSort(sort.key); setSortOpen(false); }}
             >
-              <Text style={[s.sortOptionTxt, { color: activeSort === sort.key ? colors.primary : colors.textPrimary, fontWeight: activeSort === sort.key ? "600" : "400" }]}>
+              <Text style={[s.sortOptionTxt, {
+                color:      activeSort === sort.key ? colors.primary : colors.textPrimary,
+                fontWeight: activeSort === sort.key ? "600" : "400",
+              }]}>
                 {sort.label}
               </Text>
               {activeSort === sort.key && (
@@ -282,7 +299,7 @@ export default function MonthSchedules() {
       <View style={s.filterRow}>
         {FILTERS.map(f => {
           const active = activeFilter === f.key;
-          const count = f.key === "all"
+          const count  = f.key === "all"
             ? items.length
             : items.filter(i => getStatus(i) === f.key).length;
           return (
@@ -291,7 +308,7 @@ export default function MonthSchedules() {
               onPress={() => setActiveFilter(f.key)}
               style={[s.filterChip, {
                 backgroundColor: active ? f.color : colors.card,
-                borderColor: active ? f.color : colors.cardBorder,
+                borderColor:     active ? f.color : colors.cardBorder,
               }]}
             >
               <Text style={[s.filterTxt, { color: active ? "#fff" : colors.textSecondary }]}>
@@ -343,44 +360,44 @@ export default function MonthSchedules() {
 
 // ── Schedule row styles ────────────────────────────────────────────────────────
 const rs = StyleSheet.create({
-  dateHeader:  { flexDirection: "row", alignItems: "center", borderLeftWidth: 3, paddingLeft: 10, marginHorizontal: 16, marginTop: 16, marginBottom: 8 },
-  dateLabel:   { fontSize: 13, fontWeight: "600" },
-  card:        { flexDirection: "row", borderWidth: 0.5, borderRadius: 14, marginHorizontal: 16, marginBottom: 8, overflow: "hidden" },
-  accent:      { width: 4 },
-  cardBody:    { flex: 1, padding: 12 },
-  titleRow:    { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 5 },
-  title:       { fontSize: 14, fontWeight: "600", flex: 1 },
-  typePill:    { borderRadius: 20, paddingHorizontal: 7, paddingVertical: 2 },
-  typeTxt:     { fontSize: 10, fontWeight: "500" },
-  metaRow:     { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
-  meta:        { fontSize: 12 },
-  urgentPill:  { backgroundColor: "#FAEEDA", borderRadius: 20, paddingHorizontal: 6, paddingVertical: 2 },
-  urgentTxt:   { fontSize: 10, fontWeight: "500", color: "#633806" },
-  statusPill:  { borderRadius: 20, paddingHorizontal: 7, paddingVertical: 2 },
-  statusTxt:   { fontSize: 10, fontWeight: "600" },
-  desc:        { fontSize: 12, marginTop: 4 },
+  dateHeader: { flexDirection: "row", alignItems: "center", borderLeftWidth: 3, paddingLeft: 10, marginHorizontal: 16, marginTop: 16, marginBottom: 8 },
+  dateLabel:  { fontSize: 13, fontWeight: "600" },
+  card:       { flexDirection: "row", borderWidth: 0.5, borderRadius: 14, marginHorizontal: 16, marginBottom: 8, overflow: "hidden" },
+  accent:     { width: 4 },
+  cardBody:   { flex: 1, padding: 12 },
+  titleRow:   { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 5 },
+  title:      { fontSize: 14, fontWeight: "600", flex: 1 },
+  typePill:   { borderRadius: 20, paddingHorizontal: 7, paddingVertical: 2 },
+  typeTxt:    { fontSize: 10, fontWeight: "500" },
+  metaRow:    { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  meta:       { fontSize: 12 },
+  urgentPill: { backgroundColor: "#FAEEDA", borderRadius: 20, paddingHorizontal: 6, paddingVertical: 2 },
+  urgentTxt:  { fontSize: 10, fontWeight: "500", color: "#633806" },
+  statusPill: { borderRadius: 20, paddingHorizontal: 7, paddingVertical: 2 },
+  statusTxt:  { fontSize: 10, fontWeight: "600" },
+  desc:       { fontSize: 12, marginTop: 4 },
 });
 
 const s = StyleSheet.create({
-  header:       { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 0.5 },
-  backBtn:      { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  headerTitle:  { fontSize: 17, fontWeight: "600" },
-  headerSub:    { fontSize: 12, marginTop: 1 },
-  sortBtn:      { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 0.5, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7 },
-  sortBtnTxt:   { fontSize: 13, fontWeight: "500" },
-  sortDropdown: { borderWidth: 0.5, borderRadius: 12, marginHorizontal: 16, marginTop: 8, overflow: "hidden" },
-  sortOption:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5 },
-  sortOptionTxt:{ fontSize: 14 },
-  searchWrap:   { flexDirection: "row", alignItems: "center", gap: 10, marginHorizontal: 16, marginVertical: 12, borderWidth: 0.5, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11 },
-  searchInput:  { flex: 1, fontSize: 14, padding: 0 },
-  filterRow:    { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginBottom: 10, flexWrap: "wrap" },
-  filterChip:   { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6 },
-  filterTxt:    { fontSize: 12, fontWeight: "500" },
-  filterCount:  { borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
+  header:        { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 0.5 },
+  backBtn:       { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  headerTitle:   { fontSize: 17, fontWeight: "600" },
+  headerSub:     { fontSize: 12, marginTop: 1 },
+  sortBtn:       { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 0.5, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7 },
+  sortBtnTxt:    { fontSize: 13, fontWeight: "500" },
+  sortDropdown:  { borderWidth: 0.5, borderRadius: 12, marginHorizontal: 16, marginTop: 8, overflow: "hidden" },
+  sortOption:    { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5 },
+  sortOptionTxt: { fontSize: 14 },
+  searchWrap:    { flexDirection: "row", alignItems: "center", gap: 10, marginHorizontal: 16, marginVertical: 12, borderWidth: 0.5, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11 },
+  searchInput:   { flex: 1, fontSize: 14, padding: 0 },
+  filterRow:     { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginBottom: 10, flexWrap: "wrap" },
+  filterChip:    { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6 },
+  filterTxt:     { fontSize: 12, fontWeight: "500" },
+  filterCount:   { borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
   filterCountTxt:{ fontSize: 11, fontWeight: "600" },
-  loader:       { flex: 1, alignItems: "center", justifyContent: "center" },
-  empty:        { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, paddingHorizontal: 32 },
-  emptyTitle:   { fontSize: 18, fontWeight: "600", textAlign: "center" },
-  emptySub:     { fontSize: 13, textAlign: "center", lineHeight: 20 },
-  listContent:  { paddingBottom: 40 },
+  loader:        { flex: 1, alignItems: "center", justifyContent: "center" },
+  empty:         { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, paddingHorizontal: 32 },
+  emptyTitle:    { fontSize: 18, fontWeight: "600", textAlign: "center" },
+  emptySub:      { fontSize: 13, textAlign: "center", lineHeight: 20 },
+  listContent:   { paddingBottom: 40 },
 });

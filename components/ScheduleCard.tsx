@@ -13,7 +13,6 @@ export function ScheduleCard({
 }) {
   const { colors } = useTheme();
 
-  // ✅ SAFE FALLBACKS
   const safeType = item.type || "General";
   const safeTitle = item.title || "Untitled";
   const safeTime = item.startTime || "--:--";
@@ -65,11 +64,11 @@ export function ScheduleCard({
             </Text>
           </View>
 
-          {/* DONE LATE */}
-          {item.isCompleted &&
+          {/* ✅ FIXED: "Done Late" now uses the completion timestamp */}
+         {item.isCompleted &&
             item.date &&
             item.startTime &&
-            isPastDateTime(item.date, item.startTime) && (
+            isPastDateTime(item.date, item.startTime, item.completedAt) && (
               <View style={s.doneLate}>
                 <Text style={s.doneLateText}>Done Late</Text>
               </View>
@@ -97,11 +96,7 @@ export function ScheduleCard({
           <Ionicons
             name="pencil-outline"
             size={15}
-            color={
-              isOverdue || item.isCompleted
-                ? "#ccc"
-                : colors.textSecondary
-            }
+            color={isOverdue || item.isCompleted ? "#ccc" : colors.textSecondary}
           />
         </TouchableOpacity>
 
@@ -137,65 +132,21 @@ const s = StyleSheet.create({
     marginBottom: 8,
   },
   schedDone: { opacity: 0.5 },
-
-  schedTime: {
-    fontSize: 11,
-    fontWeight: "500",
-    width: 48,
-    textAlign: "center",
-  },
-
-  dot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-  },
-
-  schedTitle: {
-    fontSize: 14,
-    fontWeight: "500",
-    flexShrink: 1,
-  },
-
-  schedSub: {
-    fontSize: 11,
-    marginTop: 1,
-  },
-
-  typePill: {
-    borderRadius: 20,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-
-  typePillTxt: {
-    fontSize: 10,
-    fontWeight: "500",
-  },
-
+  schedTime: { fontSize: 11, fontWeight: "500", width: 48, textAlign: "center" },
+  dot: { width: 9, height: 9, borderRadius: 5 },
+  schedTitle: { fontSize: 14, fontWeight: "500", flexShrink: 1 },
+  schedSub: { fontSize: 11, marginTop: 1 },
+  typePill: { borderRadius: 20, paddingHorizontal: 6, paddingVertical: 2 },
+  typePillTxt: { fontSize: 10, fontWeight: "500" },
   doneLate: {
     borderRadius: 20,
     paddingHorizontal: 6,
     paddingVertical: 2,
     backgroundColor: "rgba(255, 152, 0, 0.15)",
   },
-
-  doneLateText: {
-    fontSize: 10,
-    fontWeight: "500",
-    color: "#FF9800",
-  },
-
-  actions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-
-  actionBtn: {
-    padding: 4,
-  },
-
+  doneLateText: { fontSize: 10, fontWeight: "500", color: "#FF9800" },
+  actions: { flexDirection: "row", alignItems: "center", gap: 6 },
+  actionBtn: { padding: 4 },
   check: {
     width: 22,
     height: 22,

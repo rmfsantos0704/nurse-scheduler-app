@@ -2,6 +2,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity,
   Alert, ActivityIndicator, ScrollView,
   Platform, TextInput, Image, Dimensions,
+  Modal
 } from "react-native";
 import { useState, useRef, useEffect } from "react";
 import { router, useLocalSearchParams } from "expo-router";
@@ -12,7 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
 import { noteService } from "../services/noteService";
 
-const { width: W } = Dimensions.get("window");
+const { width: W, height: H } = Dimensions.get("window");
 
 function makeHistory<T>(initial: T) {
   const stack: T[] = [initial];
@@ -49,24 +50,25 @@ export default function NoteEditor() {
   const [loading, setLoading] = useState(!isNew);
   const [saving,  setSaving]  = useState(false);
   const [saved,   setSaved]   = useState(true);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isNew && params.id) {
+      setLoading(true);
       noteService.getById(params.id).then(note => {
         if (note) {
           setTitle(note.title ?? "");
-          setContent(note.content ?? "");
+          const savedContent = note.content ?? "";
+          setContent(savedContent);
           setImages(note.images ?? []);
-          history.current = makeHistory(note.content ?? "");
+          history.current = makeHistory(savedContent);
         }
         setLoading(false);
       });
+    } else {
+      setLoading(false);
     }
-  }, [params.id]);
-
-  const onEditorReady = () => {
-    if (content) editorRef.current?.setContentHTML(content);
-  };
+  }, [params.id, isNew]);
 
   const onContentChange = (html: string) => {
     setContent(html);
@@ -77,12 +79,20 @@ export default function NoteEditor() {
 
   const handleUndo = () => {
     const prev = history.current.undo();
-    if (prev !== null) { editorRef.current?.setContentHTML(prev); setContent(prev); setSaved(false); }
+    if (prev !== null) { 
+      editorRef.current?.setContentHTML(prev); 
+      setContent(prev); 
+      setSaved(false); 
+    }
   };
 
   const handleRedo = () => {
     const next = history.current.redo();
-    if (next !== null) { editorRef.current?.setContentHTML(next); setContent(next); setSaved(false); }
+    if (next !== null) { 
+      editorRef.current?.setContentHTML(next); 
+      setContent(next); 
+      setSaved(false); 
+    }
   };
 
   const pickImage = async () => {
@@ -137,9 +147,8 @@ export default function NoteEditor() {
     } else { router.back(); }
   };
 
-  const topInset    = insets.top    > 0 ? insets.top    : (Platform.OS === "android" ? 28 : 44);
+  const topInset = insets.top > 0 ? insets.top : (Platform.OS === "android" ? 28 : 44);
   const bottomInset = insets.bottom > 0 ? insets.bottom : (Platform.OS === "android" ? 16 : 0);
-  const toolbarTotalH = UNDO_ROW_H + FMT_ROW_H + bottomInset;
 
   if (loading) {
     return (
@@ -151,120 +160,118 @@ export default function NoteEditor() {
   }
 
   return (
-    /*
-     * Pure flex column. No absolute positioning anywhere.
-     *
-     * [spacer]          fixed: topInset px
-     * [topbar]          fixed: 52px
-     * [title]           fixed: 56px
-     * [ScrollView]      flex: 1  ← grows/shrinks, never pushes toolbar
-     * [toolbar]         fixed: UNDO_ROW_H + FMT_ROW_H + bottomInset px
-     *
-     * Toolbar height is pure arithmetic — native layout never measures it.
-     * Images grow ScrollView content, not its size, so toolbar never moves.
-     */
     <View style={[s.root, { backgroundColor: colors.background }]}>
-
-      {/* Safe top spacer */}
       <View style={{ height: topInset, backgroundColor: colors.background }} />
-
-      {/* ── TOP BAR ── */}
-      <View style={[s.topBar, {
-        borderBottomColor: colors.cardBorder,
-        backgroundColor:   colors.background,
-      }]}>
-        <TouchableOpacity onPress={handleBack} style={s.iconBtn}>
-          <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
+      
+      {/* Nav Bar */}
+      <View style={[s.topBar, { borderBottomColor: colors.cardBorder, backgroundColor: colors.background }]}>
+        <TouchableOpacity onPress={handleBack} style={[s.iconBtn, { zIndex: 10 }]}>
+          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-
-        <View style={s.topMid}>
-          <Text style={[s.topLabel, { color: colors.textSecondary }]} numberOfLines={1}>
-            {title || (isNew ? "New note" : "Edit note")}
-          </Text>
-          <View style={[s.savedPill, {
-            backgroundColor: saved ? "#EAF3DE" : colors.primaryLight + "99",
-          }]}>
-            <Text style={[s.savedTxt, { color: saved ? "#27500A" : colors.primary }]}>
-              {saved ? "Saved" : "Editing"}
+        <View style={s.centeredTitleContainer} pointerEvents="none">
+          <View style={s.topMidCentered}>
+            <Text style={[s.topLabel, { color: colors.textSecondary }]} numberOfLines={1}>
+              {title || (isNew ? "New note" : "Edit note")}
             </Text>
           </View>
         </View>
-
-        <TouchableOpacity
-          onPress={handleSave} disabled={saving}
-          style={[s.saveBtn, { backgroundColor: colors.primary, opacity: saving ? 0.6 : 1 }]}
-        >
-          {saving
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <Text style={s.saveBtnTxt}>Save</Text>}
+          <View style={{ flex: 1 }} />
+        <TouchableOpacity onPress={handleSave} style={[s.saveBtn, { backgroundColor: colors.primary, opacity: saving ? 0.7 : 1 }]} disabled={saving}>
+          <Text style={s.saveBtnTxt}>{saving ? "Saving..." : "Save"}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* ── TITLE ── */}
-      <View style={[s.titleWrap, {
-        borderBottomColor: colors.cardBorder,
-        backgroundColor:   colors.background,
-      }]}>
+      {/* Toolbar with Pinned Media Buttons */}
+      <View style={[
+        s.toolbar, 
+        { 
+          backgroundColor: colors.card, 
+          borderBottomWidth: 0.5, 
+          borderBottomColor: colors.cardBorder,
+          flexDirection: 'row', 
+          alignItems: 'center' 
+        }
+      ]}>
+        <RichToolbar
+          editor={editorRef}
+          style={[s.fmtToolbar, { backgroundColor: colors.card, height: FMT_ROW_H, flex: 1 }]}
+          iconTint={colors.textPrimary}
+          selectedIconTint={colors.primary}
+          actions={[
+            actions.setBold, actions.setItalic, actions.setUnderline, actions.setStrikethrough,
+            actions.heading1, actions.heading2, actions.insertBulletsList, actions.insertOrderedList,
+            actions.blockquote, actions.indent, actions.outdent, actions.alignLeft,
+            actions.alignCenter, actions.alignRight, actions.code, actions.removeFormat,
+          ]}
+          iconMap={{
+            [actions.heading1]: ({ tintColor }: any) => <Text style={[s.ico, { color: tintColor }]}>H1</Text>,
+            [actions.heading2]: ({ tintColor }: any) => <Text style={[s.ico, { color: tintColor }]}>H2</Text>,
+            [actions.code]: ({ tintColor }: any) => <Text style={[s.ico, { color: tintColor }]}>{`</>`}</Text>,
+          }}
+        />
+
+        {/* Media Buttons */}
+        <View style={{ flexDirection: 'row', paddingHorizontal: 4 }}>
+          <View style={{ width: 1, height: 40, backgroundColor: colors.cardBorder }} />  
+          <View style={s.undoRow}>
+            <TouchableOpacity onPress={handleUndo} disabled={!history.current.canUndo()} style={[s.undoBtn, !history.current.canUndo() && s.dimmed]}>
+              <Ionicons name="arrow-undo-outline" size={22} color={colors.textPrimary} />   
+            </TouchableOpacity> 
+            <TouchableOpacity onPress={handleRedo} disabled={!history.current.canRedo()} style={[s.undoBtn, !history.current.canRedo() && s.dimmed]}> 
+              <Ionicons name="arrow-redo-outline" size={22} color={colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity onPress={takePhoto} style={s.mediaBtn}>
+            <Ionicons name="camera-outline" size={22} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={pickImage} style={s.mediaBtn}>
+            <Ionicons name="image-outline" size={22} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Title Input */}
+      <View style={[s.titleWrap, { borderBottomColor: colors.cardBorder, backgroundColor: colors.background }]}>
         <TextInput
           style={[s.titleInput, { color: colors.textPrimary }]}
           placeholder="Note title"
           placeholderTextColor={colors.textSecondary}
           value={title}
           onChangeText={v => { setTitle(v); setSaved(false); }}
-          returnKeyType="next"
-          maxLength={120}
           onSubmitEditing={() => editorRef.current?.focusContentEditor()}
         />
       </View>
 
-      {/* ── SCROLL AREA — flex:1 — the only thing that grows/shrinks ── */}
       <ScrollView
         style={[s.editorScroll, { backgroundColor: colors.background }]}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={s.editorContent}
+        contentContainerStyle={[s.editorContent, { paddingBottom: bottomInset + 20 }]}
       >
         <RichEditor
+          key={params.id || "new"}
           ref={editorRef}
           style={s.editor}
-          placeholder="Start writing your note..."
-          initialContentHTML=""
+          placeholder="Start writing..."
+          initialContentHTML={content}
           editorStyle={{
-            backgroundColor:  colors.background,
-            color:            colors.textPrimary,
-            placeholderColor: colors.textSecondary,
-            caretColor:       colors.primary,
-            contentCSSText: `
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-              font-size: 16px;
-              line-height: 1.75;
-              padding: 16px 20px 20px 20px;
-              word-break: break-word;
-            `,
+            backgroundColor: colors.background,
+            color: colors.textPrimary,
+            contentCSSText: `font-size: 16px; line-height: 1.75; padding: 16px 20px;`,
           }}
           onChange={onContentChange}
-          onEditorReady={onEditorReady}
-          pasteAsPlainText={false}
-          scrollEnabled={false}
-          autoCorrect
-          initialFocus={isNew}
         />
 
-        {/* Native images — never in WebView */}
+        {/* Image Grid with Viewer Trigger */}
         {images.length > 0 && (
           <View style={[s.imgSection, { borderTopColor: colors.cardBorder }]}>
-            <Text style={[s.imgSectionLbl, { color: colors.textSecondary }]}>
-              Photos ({images.length})
-            </Text>
+            <Text style={[s.imgSectionLbl, { color: colors.textSecondary }]}>Photos ({images.length})</Text>
             <View style={s.imgGrid}>
               {images.map((uri, idx) => (
                 <View key={`img-${idx}`} style={s.imgWrap}>
-                  <Image source={{ uri }} style={s.img} resizeMode="cover" />
-                  <TouchableOpacity
-                    style={[s.imgDel, { backgroundColor: colors.background }]}
-                    onPress={() => removeImage(idx)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
+                  <TouchableOpacity activeOpacity={0.9} onPress={() => setSelectedImage(uri)} style={s.imgTouch}>
+                    <Image source={{ uri }} style={s.img} resizeMode="cover" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[s.imgDel, { backgroundColor: colors.background }]} onPress={() => removeImage(idx)}>
                     <Ionicons name="close-circle" size={22} color="#E24B4A" />
                   </TouchableOpacity>
                 </View>
@@ -274,155 +281,96 @@ export default function NoteEditor() {
         )}
       </ScrollView>
 
-      {/* ── TOOLBAR — hardcoded height, never measured, never shifts ── */}
-      <View style={[s.toolbar, {
-        height:          toolbarTotalH,
-        backgroundColor: colors.card,
-        borderTopColor:  colors.cardBorder,
-        paddingBottom:   bottomInset,
-      }]}>
-
-        <View style={[s.undoRow, {
-          height:            UNDO_ROW_H,
-          borderBottomColor: colors.cardBorder,
-        }]}>
-          <TouchableOpacity
-            onPress={handleUndo}
-            disabled={!history.current.canUndo()}
-            style={[s.undoBtn, !history.current.canUndo() && s.dimmed]}
+      {/* Image Viewer Modal */}
+      <Modal visible={!!selectedImage} transparent={true} animationType="fade">
+        <View style={s.modalRoot}>
+          <TouchableOpacity style={s.modalClose} onPress={() => setSelectedImage(null)}>
+            <Ionicons name="close" size={30} color="#fff" />
+          </TouchableOpacity>
+          <ScrollView
+            contentContainerStyle={s.modalScroll}
+            maximumZoomScale={3}
+            minimumZoomScale={1}
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
           >
-            <Ionicons
-              name="arrow-undo-outline" size={19}
-              color={history.current.canUndo() ? colors.textPrimary : colors.textSecondary}
-            />
-            <Text style={[s.undoBtnTxt, {
-              color: history.current.canUndo() ? colors.textPrimary : colors.textSecondary,
-            }]}>Undo</Text>
-          </TouchableOpacity>
-
-          <View style={[s.divider, { backgroundColor: colors.cardBorder }]} />
-
-          <TouchableOpacity
-            onPress={handleRedo}
-            disabled={!history.current.canRedo()}
-            style={[s.undoBtn, !history.current.canRedo() && s.dimmed]}
-          >
-            <Text style={[s.undoBtnTxt, {
-              color: history.current.canRedo() ? colors.textPrimary : colors.textSecondary,
-            }]}>Redo</Text>
-            <Ionicons
-              name="arrow-redo-outline" size={19}
-              color={history.current.canRedo() ? colors.textPrimary : colors.textSecondary}
-            />
-          </TouchableOpacity>
-
-          <View style={{ flex: 1 }} />
-
-          <TouchableOpacity onPress={takePhoto} style={s.mediaBtn}>
-            <Ionicons name="camera-outline" size={21} color={colors.primary} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={pickImage} style={s.mediaBtn}>
-            <Ionicons name="image-outline" size={21} color={colors.primary} />
-          </TouchableOpacity>
+            {selectedImage && <Image source={{ uri: selectedImage }} style={s.fullImg} resizeMode="contain" />}
+          </ScrollView>
         </View>
-
-        <RichToolbar
-          editor={editorRef}
-          style={[s.fmtToolbar, { backgroundColor: colors.card, height: FMT_ROW_H }]}
-          flatContainerStyle={{ paddingHorizontal: 6 }}
-          iconTint={colors.textPrimary}
-          selectedIconTint={colors.primary}
-          selectedButtonStyle={{ backgroundColor: colors.primaryLight, borderRadius: 8 }}
-          disabledIconTint={colors.textSecondary}
-          actions={[
-            actions.setBold,
-            actions.setItalic,
-            actions.setUnderline,
-            actions.setStrikethrough,
-            actions.heading1,
-            actions.heading2,
-            actions.insertBulletsList,
-            actions.insertOrderedList,
-            actions.blockquote,
-            actions.indent,
-            actions.outdent,
-            actions.alignLeft,
-            actions.alignCenter,
-            actions.alignRight,
-            actions.code,
-            actions.removeFormat,
-          ]}
-          iconMap={{
-            [actions.heading1]:     ({ tintColor }: any) => <Text style={[s.ico, { color: tintColor }]}>H1</Text>,
-            [actions.heading2]:     ({ tintColor }: any) => <Text style={[s.ico, { color: tintColor }]}>H2</Text>,
-            [actions.blockquote]:   ({ tintColor }: any) => <Text style={[s.ico, { color: tintColor }]}>"</Text>,
-            [actions.code]:         ({ tintColor }: any) => <Text style={[s.ico, { color: tintColor }]}>{`</>`}</Text>,
-            [actions.removeFormat]: ({ tintColor }: any) => <Text style={[s.ico, { color: tintColor }]}>Tx</Text>,
-            [actions.indent]:       ({ tintColor }: any) => <Ionicons name="arrow-forward-outline" size={18} color={tintColor} />,
-            [actions.outdent]:      ({ tintColor }: any) => <Ionicons name="arrow-back-outline" size={18} color={tintColor} />,
-          }}
-        />
-      </View>
+      </Modal>
     </View>
   );
 }
 
 const s = StyleSheet.create({
+  topBar: {
+    height: 64, 
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between", 
+    paddingHorizontal: 16, 
+    borderBottomWidth: 0.5,
+    position: 'relative', 
+  },
+  centeredTitleContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  topMidCentered: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    maxWidth: W * 0.5, 
+  },
   root:          { flex: 1 },
   loader:        { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   loadingTxt:    { fontSize: 14 },
 
-  topBar:        {
-    height: 52,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    gap: 8,
-    borderBottomWidth: 0.5,
+  iconBtn: { 
+    width: 44, 
+    height: 44, 
+    borderRadius: 22, 
+    alignItems: "center", 
+    justifyContent: "center",
+    marginLeft: -8 
   },
-  iconBtn:       { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   topMid:        { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
-  topLabel:      { fontSize: 14, fontWeight: "500", flexShrink: 1 },
+  topLabel:      { fontSize: 16, fontWeight: "500", flexShrink: 1 },
   savedPill:     { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
   savedTxt:      { fontSize: 11, fontWeight: "500" },
-  saveBtn:       { borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8 },
-  saveBtnTxt:    { color: "#fff", fontSize: 14, fontWeight: "600" },
-
-  titleWrap:     {
-    height: 56,
-    justifyContent: "center",
-    paddingHorizontal: 20,
-    borderBottomWidth: 0.5,
+  saveBtn: { 
+    borderRadius: 20, 
+    paddingHorizontal: 16, 
+    paddingVertical: 8,
+    minWidth: 70, 
+    alignItems: 'center',
+    justifyContent: 'center'
   },
+  saveBtnTxt: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  titleWrap:     { height: 56, justifyContent: "center", paddingHorizontal: 20, borderBottomWidth: 0.5 },
   titleInput:    { fontSize: 22, fontWeight: "700" },
-
-  editorScroll:  { flex: 1 },          // ← the only flex:1 in the tree
-  editorContent: { paddingBottom: 20 },
+  editorScroll:  { flex: 1 },
+  editorContent: { paddingTop: 10 },
   editor:        { minHeight: 260 },
-
   imgSection:    { borderTopWidth: 0.5, marginTop: 16, paddingHorizontal: 20, paddingTop: 16 },
-  imgSectionLbl: { fontSize: 12, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 12 },
+  imgSectionLbl: { fontSize: 12, fontWeight: "600", textTransform: "uppercase", marginBottom: 12 },
   imgGrid:       { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   imgWrap:       { position: "relative", width: (W - 60) / 2, height: (W - 60) / 2 },
+  imgTouch:      { width: "100%", height: "100%" },
   img:           { width: "100%", height: "100%", borderRadius: 12 },
   imgDel:        { position: "absolute", top: -8, right: -8, borderRadius: 12 },
-
-  toolbar:       { borderTopWidth: 0.5, overflow: "hidden" },
-  undoRow:       {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    gap: 2,
-    borderBottomWidth: 0.5,
-  },
-  undoBtn:       {
-    flexDirection: "row", alignItems: "center",
-    gap: 5, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8,
-  },
+  toolbar:       { overflow: "hidden" },
+  undoRow:       { flexDirection: "row", alignItems: "center", paddingHorizontal: 8, gap: 2 },
+  undoBtn:       { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 3, paddingVertical: 7 },
   undoBtnTxt:    { fontSize: 13, fontWeight: "500" },
   divider:       { width: 1, height: 20, marginHorizontal: 4 },
   dimmed:        { opacity: 0.3 },
   mediaBtn:      { width: 38, height: 38, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   fmtToolbar:    {},
   ico:           { fontSize: 14, fontWeight: "700" },
+  modalRoot:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center' },
+  modalClose:    { position: 'absolute', top: Platform.OS === 'ios' ? 60 : 20, right: 20, zIndex: 10, padding: 10 },
+  modalScroll:   { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  fullImg:       { width: W, height: H * 0.8 },
 });

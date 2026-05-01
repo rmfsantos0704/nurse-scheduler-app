@@ -15,14 +15,16 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "backgroundColor": "#FFF5F8"
       },
-      "permissions": ["android.permission.POST_NOTIFICATIONS"],
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS"
+      ],
       "package": "com.snowed.app"
     },
     "ios": {
       "bundleIdentifier": "com.snowed.app",
       "supportsTablet": false
     },
-     "plugins": [
+    "plugins": [
       "expo-notifications",
       [
         "expo-image-picker",
@@ -30,7 +32,8 @@
           "photosPermission": "SnowEd needs photo access to attach images to notes.",
           "cameraPermission": "SnowEd needs camera access to take photos for notes."
         }
-      ]
+      ],
+      "expo-sqlite"
     ]
   }
 }

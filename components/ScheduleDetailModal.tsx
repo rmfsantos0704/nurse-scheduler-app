@@ -4,10 +4,18 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 export type ScheduleItem = {
-  _id: string; title: string; type: string;
-  date: string; startTime: string;
-  description?: string; isCompleted: boolean;
-  isUrgent?: boolean; courseId?: string | null;
+  _id: string; 
+  title: string; 
+  type: string;
+  date: string; 
+  startTime: string;
+  description?: string; 
+  isCompleted: boolean;
+  completedAt?: string | null; // ✅ Added: ISO string for the turn-in time
+  isUrgent?: boolean; 
+  courseId?: string | null;
+  courseName?: string | null; 
+  code?: string; // ✅ Added: Course code for students
   reminderMinutesBefore?: number;
 };
 
@@ -46,6 +54,32 @@ function checkIsPast(date: string, startTime: string): boolean {
   } catch { return false; }
 }
 
+// Add this new helper function or update checkIsPast
+function checkIsDoneLate(date: string, startTime: string, completedAt?: string | null): boolean {
+  if (!completedAt || !date || !startTime) return false;
+  
+  try {
+    const [y, m, d] = date.split("-").map(Number);
+    const cleaned = startTime.replace(/\./g, ":").trim();
+    const match = cleaned.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    if (!match) return false;
+    
+    let h = parseInt(match[1]);
+    const min = parseInt(match[2]);
+    const ap = match[3]?.toUpperCase();
+    if (ap === "PM" && h < 12) h += 12;
+    if (ap === "AM" && h === 12) h = 0;
+    
+    const scheduledDate = new Date(y, m - 1, d, h, min);
+    const completionDate = new Date(completedAt);
+    
+    // Truly late only if completion happened AFTER the scheduled time
+    return completionDate > scheduledDate;
+  } catch {
+    return false;
+  }
+}
+
 function formatReminder(minutes?: number): string {
   if (minutes === undefined || minutes === null) return "Not set";
   if (minutes === 0)    return "At start time";
@@ -69,21 +103,27 @@ export function ScheduleDetailModal({
   item, visible, onClose, colors,
   onEdit, onDelete, onToggleComplete, readOnly,
 }: Props) {
-  // Do NOT short-circuit here — let the Modal handle visibility
-  // Only guard inner content
   const hasItem = item !== null && item !== undefined;
   const safeItem = item ?? {} as ScheduleItem;
 
   const typeColor = hasItem ? (TYPE_COLORS[safeItem.type] || colors.primary) : colors.primary;
   const typeBg    = hasItem ? (TYPE_BG[safeItem.type]    || colors.primaryLight) : colors.primaryLight;
-  const overdue   = hasItem ? (!safeItem.isCompleted && checkIsPast(safeItem.date, safeItem.startTime)) : false;
+  const isPast    = hasItem ? checkIsPast(safeItem.date, safeItem.startTime) : false;
+// ✅ FIX: Use the new logic that respects the completion timestamp[cite: 8]
+  const isPastTime = hasItem ? checkIsPast(safeItem.date, safeItem.startTime) : false;
+  const doneLate = hasItem ? checkIsDoneLate(safeItem.date, safeItem.startTime, safeItem.completedAt) : false;
+  const overdue  = hasItem ? (!safeItem.isCompleted && isPastTime) : false;
   const canEdit   = hasItem ? (!safeItem.isCompleted && !overdue) : false;
-
-  const statusColor = safeItem.isCompleted ? "#639922" : overdue ? "#E24B4A" : colors.primary;
-  const statusIcon  = safeItem.isCompleted
-    ? "checkmark-circle" : overdue ? "alert-circle" : "time-outline";
+  // Status derivation — three completed states: Completed, Done Late, Overdue, Pending
+  const statusColor = safeItem.isCompleted
+    ? (doneLate ? "#C07A00" : "#639922")
+    : overdue ? "#E24B4A" : colors.primary;
+  const statusIcon: any = safeItem.isCompleted
+    ? (doneLate ? "checkmark-done-circle" : "checkmark-circle")
+    : overdue ? "alert-circle" : "time-outline";
   const statusLabel = safeItem.isCompleted
-    ? "Completed" : overdue ? "Overdue — not yet done" : "Pending";
+    ? (doneLate ? "Done Late" : "Completed")
+    : overdue ? "Overdue — not yet done" : "Pending";
 
   return (
     <Modal
@@ -91,7 +131,6 @@ export function ScheduleDetailModal({
       animationType="slide"
       transparent
       onRequestClose={onClose}
-      // key ensures React fully remounts when item changes
     >
       <View style={ms.overlay}>
         <View style={[ms.sheet, { backgroundColor: colors.background }]}>
@@ -126,7 +165,12 @@ export function ScheduleDetailModal({
                     <Text style={[ms.badgePillTxt, { color: "#E24B4A" }]}>Overdue</Text>
                   </View>
                 )}
-                {safeItem.isCompleted && (
+                {doneLate && (
+                  <View style={[ms.badgePill, { backgroundColor: "#FFF3CD" }]}>
+                    <Text style={[ms.badgePillTxt, { color: "#C07A00" }]}>⏰ Done Late</Text>
+                  </View>
+                )}
+                {safeItem.isCompleted && !doneLate && (
                   <View style={[ms.badgePill, { backgroundColor: "#EAF3DE" }]}>
                     <Text style={[ms.badgePillTxt, { color: "#27500A" }]}>✓ Done</Text>
                   </View>
@@ -154,7 +198,24 @@ export function ScheduleDetailModal({
                   {safeItem.startTime || "—"}
                 </Text>
               </InfoCard>
-
+              
+              {/* ── COURSE SECTION ── */}
+<InfoCard colors={colors} icon="book-outline" label="Course">
+  {safeItem.courseName || safeItem.code ? (
+    <View>
+      <Text style={[ms.infoValue, { color: colors.textPrimary }]}>
+        {/* ✅ Display Code and Name, not the Hex ID */}
+        {safeItem.code ? `[${safeItem.code}] ` : ""}
+        {safeItem.courseName || "Unnamed Course"}
+      </Text>
+    </View>
+  ) : (
+    <Text style={[ms.infoValueMuted, { color: colors.textSecondary }]}>
+      No course linked
+    </Text>
+  )}
+</InfoCard>
+          
               {/* ── REMINDER ── */}
               <InfoCard colors={colors} icon="alarm-outline" label="Reminder">
                 <Text style={[ms.infoValue, { color: colors.textPrimary }]}>
@@ -178,42 +239,57 @@ export function ScheduleDetailModal({
               {/* ── STATUS ── */}
               <InfoCard
                 colors={colors}
-                icon={statusIcon as any}
+                icon={statusIcon}
                 label="Status"
-                cardBg={safeItem.isCompleted ? "#EAF3DE" : overdue ? "#FCEBEB" : undefined}
-                cardBorder={safeItem.isCompleted ? "#639922" : overdue ? "#E24B4A" : undefined}
-                iconBg={safeItem.isCompleted ? "#C0DD97" : overdue ? "#F7C1C1" : undefined}
+                cardBg={
+                  safeItem.isCompleted
+                    ? (doneLate ? "#FFF8EC" : "#EAF3DE")
+                    : overdue ? "#FCEBEB" : undefined
+                }
+                cardBorder={
+                  safeItem.isCompleted
+                    ? (doneLate ? "#C07A00" : "#639922")
+                    : overdue ? "#E24B4A" : undefined
+                }
+                iconBg={
+                  safeItem.isCompleted
+                    ? (doneLate ? "#FFE4A0" : "#C0DD97")
+                    : overdue ? "#F7C1C1" : undefined
+                }
                 iconColor={statusColor}
               >
                 <Text style={[ms.infoValue, { color: statusColor }]}>{statusLabel}</Text>
               </InfoCard>
 
-              {/* ── WARNINGS ── */}
-              {safeItem.isUrgent && !safeItem.isCompleted && (
-                <View style={[ms.warningBox, { backgroundColor: "#FFF3CD", borderColor: "#856404" }]}>
-                  <Ionicons name="warning-outline" size={16} color="#856404" />
-                  <Text style={[ms.warningTxt, { color: "#856404" }]}>
-                    Marked urgent — appears in your Reminders tab.
-                  </Text>
-                </View>
-              )}
-              {overdue && (
-                <View style={[ms.warningBox, { backgroundColor: "#FCEBEB", borderColor: "#E24B4A" }]}>
-                  <Ionicons name="alert-circle-outline" size={16} color="#E24B4A" />
-                  <Text style={[ms.warningTxt, { color: "#E24B4A" }]}>
-                    This task is overdue{!readOnly ? " and cannot be edited" : ""}.
-                  </Text>
-                </View>
-              )}
-              {safeItem.isCompleted && (
-                <View style={[ms.warningBox, { backgroundColor: "#EAF3DE", borderColor: "#639922" }]}>
-                  <Ionicons name="checkmark-circle-outline" size={16} color="#639922" />
-                  <Text style={[ms.warningTxt, { color: "#27500A" }]}>
-                    Task completed{!readOnly ? " — cannot be edited" : ""}.
-                  </Text>
-                </View>
-              )}
-
+              {/* ── TURNED IN TIMESTAMP ── */}
+{safeItem.isCompleted && !!safeItem.completedAt && (
+  <InfoCard
+    colors={colors}
+    icon="checkmark-done-circle-outline"
+    label="Turned In"
+    cardBg={doneLate ? "#FFF8EC" : "#EAF3DE"}
+    cardBorder={doneLate ? "#C07A00" : "#639922"}
+    iconBg={doneLate ? "#FFE4A0" : "#C0DD97"}
+    iconColor={doneLate ? "#C07A00" : "#639922"}
+  >
+    <View>
+      <Text style={[ms.infoValue, { color: colors.textPrimary }]}>
+        {new Date(safeItem.completedAt).toLocaleDateString(undefined, {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        })}
+      </Text>
+      <Text style={[ms.infoValueSmall, { color: colors.textSecondary }]}>
+        at{" "}
+        {new Date(safeItem.completedAt).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}
+      </Text>
+    </View>
+  </InfoCard>
+)}
               {/* ── ACTIONS ── */}
               {!readOnly && (
                 <>
@@ -293,6 +369,7 @@ function InfoCard({
 }
 
 const ms = StyleSheet.create({
+  infoValueSmall: { fontSize: 13, color: "#666", marginTop: 2 },
   overlay:          { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
   sheet:            { borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 20, paddingTop: 14, maxHeight: "90%", minHeight: 200 },
   handle:           { width: 40, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 14 },
