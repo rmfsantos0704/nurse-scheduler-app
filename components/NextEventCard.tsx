@@ -7,27 +7,53 @@ type Props = { item: ScheduleItem | undefined; colors: any };
 export function NextEventCard({ item, colors }: Props) {
   if (!item) return null;
   return (
-    <View style={[s.card, { backgroundColor: colors.primary }]}>
-      <View style={s.topRow}>
-        <View style={[s.ico, { backgroundColor: "rgba(255,255,255,0.2)" }]}>
-          <Ionicons name="time-outline" size={23} color="#fff" />
-        </View>
-        <View style={[s.badge, { backgroundColor: "rgba(255,255,255,0.2)" }]}>
-          <Text style={s.badgeTxt}>{item.startTime}</Text>
+    <View style={[s.card, { borderColor: colors.primary + "30", backgroundColor: colors.card }]}>
+      {/* Outer ring */}
+      <View style={[s.ring, { borderColor: colors.primary + "25" }]}>
+        {/* Inner circle */}
+        <View style={[s.circle, { backgroundColor: colors.primary }]}>
+          <Ionicons name="time-outline" size={22} color="#fff" />
+          <Text style={s.time}>{item.startTime}</Text>
         </View>
       </View>
-      <Text style={s.title} numberOfLines={2}>{item.title}</Text>
-      <Text style={s.sub} numberOfLines={1}>{item.description || item.type}</Text>
+
+      {/* Text below the circle */}
+      <Text style={[s.title, { color: colors.textPrimary }]} numberOfLines={2}>
+        {item.title}
+      </Text>
+      <Text style={[s.sub, { color: colors.textSecondary }]} numberOfLines={1}>
+        {item.description || item.type}
+      </Text>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  card:     { borderRadius: 14, padding: 12, marginBottom: 18, gap: 6 },
-  topRow:   { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 2 },
-  ico:      { width: 40, height: 40, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  title:    { fontSize: 18, fontWeight: "600", color: "#fff", lineHeight: 18 },
-  sub:      { fontSize: 13, color: "rgba(255,255,255,0.75)" },
-  badge:    { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeTxt: { fontSize: 15, color: "#fff" },
+  card: {
+    borderRadius: 16,
+    borderWidth: 0.5,
+    padding: 14,
+    marginBottom: 18,
+    alignItems: "center",
+    gap: 10,
+  },
+  ring: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    borderWidth: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  circle: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  time:  { fontSize: 14, fontWeight: "700", color: "#fff" },
+  title: { fontSize: 15, fontWeight: "600", textAlign: "center", lineHeight: 20 },
+  sub:   { fontSize: 12, textAlign: "center" },
 });

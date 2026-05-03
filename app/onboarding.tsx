@@ -10,8 +10,9 @@ import { FlatList } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { courseService } from "../services/courseService";
 import { initDb } from "../database/db";
+import { useTheme } from "../context/ThemeContext";
 
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
 const APP_ICON = require("../assets/images/icon.png");
 
 const SCHEMES = [
@@ -28,7 +29,7 @@ const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 type SchemeKey = typeof SCHEMES[number]["key"];
 type ModeKey = "light" | "dark";
 type SlideId = "welcome" | "features" | "appearance" | "courses" | "ready";
-const SLIDES: SlideId[] = ["welcome", "features","appearance", "courses", "ready"];
+const SLIDES: SlideId[] = ["welcome", "features", "appearance", "courses", "ready"];
 
 type OnboardingCourse = {
   name: string; code: string; instructor: string;
@@ -36,7 +37,6 @@ type OnboardingCourse = {
   timeslots: { day: string; startTime: string; endTime: string }[];
 };
 
-// ── Onboarding page bg based on mode ─────────────────────────────────────────
 const PAGE_BG   = { light: "#FFFFFF", dark: "#0F0F0F" };
 const PAGE_TEXT = { light: "#1A1A1A", dark: "#F0F0F0" };
 const PAGE_SUB  = { light: "#666666", dark: "#AAAAAA" };
@@ -52,10 +52,12 @@ export default function Onboarding() {
 
   const [onboardingCourses, setOnboardingCourses] = useState<OnboardingCourse[]>([]);
 
-  // Live accent — driven by chosen scheme
+  // ✅ FIX 1: Pull setScheme/setMode from ThemeContext so changes apply
+  // to the whole app immediately — not just the onboarding preview.
+  const { setScheme: applyScheme, setMode: applyMode } = useTheme();
+
   const accent = SCHEMES.find(s => s.key === scheme)!;
 
-  // Page colors driven by mode
   const pg = {
     bg:   PAGE_BG[mode],
     text: PAGE_TEXT[mode],
@@ -65,7 +67,15 @@ export default function Onboarding() {
   };
 
   const isLast = index === SLIDES.length - 1;
-  const canNext = true;
+
+  // ✅ FIX 2: Derive button label from a stable value — lock it to the
+  // slide index rather than SLIDES.length arithmetic, which was causing
+  // the label to flicker when sub-steps inside a slide re-rendered.
+  const nextLabel = isLast
+    ? "Enter SnowEd"
+    : index === SLIDES.length - 2
+      ? "Almost done"
+      : "Next";
 
   const goTo = (i: number) => {
     flatRef.current?.scrollToIndex({ index: i, animated: true });
@@ -73,24 +83,40 @@ export default function Onboarding() {
   };
 
   const handleNext = () => {
-    if (!canNext) return;
     if (isLast) finish();
     else goTo(index + 1);
   };
 
   const finish = async () => {
     const profile = { name: "", school: "", course: "", year: "", section: "", avatar: null };
+
+    // ✅ FIX 1 (continued): Apply theme to context BEFORE navigating so
+    // the home screen renders with the correct theme instantly.
+    applyScheme(scheme);
+    applyMode(mode);
+
     await AsyncStorage.multiSet([
       ["onboardingDone", "true"],
       ["profileData",    JSON.stringify(profile)],
       ["themeScheme",    scheme],
       ["themeMode",      mode],
     ]);
-    await initDb();
-for (const c of onboardingCourses) {
-  await courseService.create(c).catch(() => {});
-}
+    for (const c of onboardingCourses) {
+      await courseService.create(c).catch(() => {});
+    }
     router.replace("/(tabs)/home");
+  };
+
+  // ✅ FIX 3: Sync local onboarding preview AND context together so the
+  // live preview on the appearance slide matches what the app will look like.
+  const handleSetScheme = (s: SchemeKey) => {
+    setScheme(s);
+    applyScheme(s);
+  };
+
+  const handleSetMode = (m: ModeKey) => {
+    setMode(m);
+    applyMode(m);
   };
 
   const onScroll = (e: any) => {
@@ -104,86 +130,79 @@ for (const c of onboardingCourses) {
     switch (id) {
       case "welcome":    return <WelcomeSlide    {...sharedProps} />;
       case "features":   return <FeaturesSlide   {...sharedProps} />;
-          case "appearance":
-      return (
-        <AppearanceSlide
-          {...sharedProps}
-          setScheme={setScheme}
-          setMode={setMode}
-          SCHEMES={SCHEMES}
-        />
-      );
+      case "appearance":
+        return (
+          <AppearanceSlide
+            {...sharedProps}
+            setScheme={handleSetScheme}
+            setMode={handleSetMode}
+            SCHEMES={SCHEMES}
+          />
+        );
       case "courses":    return <CourseSetupSlide {...sharedProps} courses={onboardingCourses} setCourses={setOnboardingCourses} />;
       case "ready":      return <ReadySlide       {...sharedProps} name={""} />;
     }
   };
 
-return (
-  <View style={[s.root, { backgroundColor: pg.bg }]}>
-    <StatusBar
-      barStyle={mode === "dark" ? "light-content" : "dark-content"}
-      backgroundColor={pg.bg}
-    />
-
-    {!isLast && index < 2 && (
-      <TouchableOpacity
-        style={[s.skipBtn, { backgroundColor: pg.card, borderColor: pg.bord }]}
-        onPress={finish}
-      >
-        <Text style={[s.skipTxt, { color: pg.sub }]}>Skip</Text>
-      </TouchableOpacity>
-    )}
-
-    {/* ✅ FIXED HERE */}
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <FlatList
-        ref={flatRef}
-        data={SLIDES}
-        keyExtractor={(id) => id}
-        horizontal
-        pagingEnabled
-        scrollEnabled={false}
-        showsHorizontalScrollIndicator={false}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        extraData={[scheme, mode, index]}
-
-        // ✅ CRITICAL FIX
-        getItemLayout={(data, index) => ({
-          length: width,
-          offset: width * index,
-          index,
-        })}
-
-        // ✅ ENSURE ALL SLIDES RENDERED
-        initialNumToRender={SLIDES.length}
-
-        // ✅ FAILSAFE FOR SCROLL BUG
-        onScrollToIndexFailed={(info) => {
-          setTimeout(() => {
-            flatRef.current?.scrollToIndex({
-              index: info.index,
-              animated: true,
-            });
-          }, 100);
-        }}
-
-        renderItem={({ item }) => (
-          <View style={{ width }}>
-            <ScrollView
-              contentContainerStyle={s.slideScroll}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              {renderSlide(item)}
-            </ScrollView>
-          </View>
-        )}
+  return (
+    <View style={[s.root, { backgroundColor: pg.bg }]}>
+      <StatusBar
+        barStyle={mode === "dark" ? "light-content" : "dark-content"}
+        backgroundColor={pg.bg}
       />
-    </KeyboardAvoidingView>
+
+      {!isLast && index < 2 && (
+        <TouchableOpacity
+          style={[s.skipBtn, { backgroundColor: pg.card, borderColor: pg.bord }]}
+          onPress={finish}
+        >
+          <Text style={[s.skipTxt, { color: pg.sub }]}>Skip</Text>
+        </TouchableOpacity>
+      )}
+
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <FlatList
+          ref={flatRef}
+          data={SLIDES}
+          keyExtractor={(id) => id}
+          horizontal
+          pagingEnabled
+          scrollEnabled={false}
+          showsHorizontalScrollIndicator={false}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          extraData={[scheme, mode, index]}
+
+          getItemLayout={(_, i) => ({
+            length: width,
+            offset: width * i,
+            index: i,
+          })}
+
+          initialNumToRender={SLIDES.length}
+
+          onScrollToIndexFailed={(info) => {
+            setTimeout(() => {
+              flatRef.current?.scrollToIndex({ index: info.index, animated: true });
+            }, 100);
+          }}
+
+          renderItem={({ item }) => (
+            <View style={{ width }}>
+              <ScrollView
+                contentContainerStyle={s.slideScroll}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                {renderSlide(item)}
+              </ScrollView>
+            </View>
+          )}
+        />
+      </KeyboardAvoidingView>
 
       {/* Bottom nav */}
       <View style={[s.bottom, { backgroundColor: pg.bg, borderTopColor: pg.bord }]}>
@@ -197,16 +216,17 @@ return (
         </View>
 
         <TouchableOpacity
-          style={[s.nextBtn, { backgroundColor: canNext ? accent.primary : pg.bord }]}
+          style={[s.nextBtn, { backgroundColor: accent.primary }]}
           onPress={handleNext}
-          disabled={!canNext}
           activeOpacity={0.85}
         >
-          <Text style={[s.nextTxt, { color: canNext ? "#fff" : pg.sub }]}>
-            {isLast ? "Enter SnowEd" : index === SLIDES.length - 2 ? "Almost done" : "Next"}
-          </Text>
-          <Ionicons name={isLast ? "arrow-forward-circle" : "arrow-forward"} size={20}
-            color={canNext ? "#fff" : pg.sub} />
+          {/* ✅ FIX 2: Use pre-computed stable label — no more flickering */}
+          <Text style={[s.nextTxt, { color: "#fff" }]}>{nextLabel}</Text>
+          <Ionicons
+            name={isLast ? "arrow-forward-circle" : "arrow-forward"}
+            size={20}
+            color="#fff"
+          />
         </TouchableOpacity>
 
         <Text style={[s.counter, { color: pg.sub }]}>{index + 1} of {SLIDES.length}</Text>
@@ -229,7 +249,6 @@ type SP = {
 function WelcomeSlide({ accent, pg }: SP) {
   return (
     <View style={sl.wrap}>
-      {/* App icon */}
       <View style={sl.iconWrap}>
         <View style={[sl.iconRing2, { borderColor: accent.primary + "18" }]} />
         <View style={[sl.iconRing1, { borderColor: accent.primary + "28" }]} />
@@ -252,7 +271,7 @@ function WelcomeSlide({ accent, pg }: SP) {
           { icon: "library-outline",       text: "Track every subject and course"            },
           { icon: "calendar-outline",      text: "Schedule classes, quizzes & activities"    },
           { icon: "notifications-outline", text: "Smart notifications before tasks start"    },
-          { icon: "warning-outline",       text: "Urgent alerts for high-priority deadlines" },
+          { icon: "document-text-outline", text: "Take notes and keep ideas organized"       },
         ].map((f, i) => (
           <View key={i} style={[sl.featRow, i > 0 && { borderTopWidth: 0.5, borderTopColor: pg.bord }]}>
             <View style={[sl.featIcon, { backgroundColor: accent.primary + "18" }]}>
@@ -274,8 +293,8 @@ function FeaturesSlide({ accent, pg }: SP) {
     { icon: "home-outline",          title: "Dashboard",  desc: "Today's schedule, progress, next event, and urgent alerts at a glance.", bg: "#E6F1FB", ic: "#378ADD" },
     { icon: "library-outline",       title: "Courses",    desc: "Add subjects with teachers, rooms, and class schedules. View all activity per course.", bg: "#EEEDFE", ic: "#7F77DD" },
     { icon: "calendar-outline",      title: "Calendar",   desc: "Monthly view of all schedules. Tap any date to see full task details.", bg: "#EAF3DE", ic: "#639922" },
+    { icon: "document-text-outline", title: "Notes",      desc: "A full notepad for jotting down ideas, summaries, and reminders per subject.", bg: "#E1F5EE", ic: "#1D9E75" },
     { icon: "notifications-outline", title: "Reminders",  desc: "Urgent tasks surfaced automatically — sorted by overdue, today, and upcoming.", bg: "#FCEBEB", ic: "#E24B4A" },
-    { icon: "person-outline",        title: "Profile",    desc: "Edit your student info, choose a color theme, and toggle dark mode.", bg: "#FAEEDA", ic: "#BA7517" },
     { icon: "color-palette-outline", title: "Themes",     desc: "5 color themes + light/dark mode. Saved across the whole app.", bg: "#FFE4EC", ic: "#D4537E" },
   ];
 
@@ -284,7 +303,7 @@ function FeaturesSlide({ accent, pg }: SP) {
       <View style={[sl.tagPill, { backgroundColor: accent.primary + "18" }]}>
         <Text style={[sl.tag, { color: accent.primary }]}>Features</Text>
       </View>
-      <Text style={[sl.title, { color: pg.text }]}>{"Five tabs,\none system"}</Text>
+      <Text style={[sl.title, { color: pg.text }]}>{"Everything\nyou need"}</Text>
       <Text style={[sl.body, { color: pg.sub }]}>Everything built around how students actually study and plan.</Text>
 
       <View style={sl.grid}>
@@ -303,252 +322,8 @@ function FeaturesSlide({ accent, pg }: SP) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SLIDE 3 — Courses
+// SLIDE 3 — Appearance
 // ─────────────────────────────────────────────────────────────────────────────
-function CourseSetupSlide({ accent, pg, courses, setCourses }: SP & {
-  courses: OnboardingCourse[];
-  setCourses: (c: OnboardingCourse[]) => void;
-}) {
-  const [step, setStep]               = useState<"list" | "add">("list");
-  const [cName, setCName]             = useState("");
-  const [cCode, setCCode]             = useState("");
-  const [cInstructor, setCInstructor] = useState("");
-  const [cRoom, setCRoom]             = useState("");
-  const [cColor, setCColor]           = useState(COURSE_COLORS[0]);
-  const [timeslots, setTimeslots]     = useState<{ day: string; startTime: string; endTime: string }[]>([]);
-  const [editingIdx, setEditingIdx]   = useState<number | null>(null);
-
-  const resetForm = () => { setCName(""); setCCode(""); setCInstructor(""); setCRoom(""); setCColor(COURSE_COLORS[0]); setTimeslots([]); setEditingIdx(null); };
-
-  const openAdd  = () => { resetForm(); setStep("add"); };
-  const openEdit = (i: number) => {
-    const c = courses[i];
-    setCName(c.name); setCCode(c.code); setCInstructor(c.instructor);
-    setCRoom(c.room); setCColor(c.color); setTimeslots([...c.timeslots]);
-    setEditingIdx(i); setStep("add");
-  };
-
-  const save = () => {
-    if (!cName.trim()) return;
-    const entry: OnboardingCourse = { name: cName.trim(), code: cCode.trim(), instructor: cInstructor.trim(), room: cRoom.trim(), color: cColor, timeslots };
-    if (editingIdx !== null) {
-      const u = [...courses]; u[editingIdx] = entry; setCourses(u);
-    } else {
-      setCourses([...courses, entry]);
-    }
-    resetForm(); setStep("list");
-  };
-
-  const remove        = (i: number) => setCourses(courses.filter((_, idx) => idx !== i));
-  const addSlot       = () => setTimeslots(ts => [...ts, { day: "Mon", startTime: "08:00 AM", endTime: "09:30 AM" }]);
-  const updateSlot    = (i: number, k: string, v: string) => setTimeslots(ts => ts.map((t, idx) => idx === i ? { ...t, [k]: v } : t));
-  const removeSlot    = (i: number) => setTimeslots(ts => ts.filter((_, idx) => idx !== i));
-
-  // LIST
-  if (step === "list") {
-    return (
-      <View style={sl.wrap}>
-        <View style={[sl.iconCircleSmall, { backgroundColor: accent.primary + "18" }]}>
-          <Ionicons name="library-outline" size={32} color={accent.primary} />
-        </View>
-        <View style={[sl.tagPill, { backgroundColor: accent.primary + "18" }]}>
-          <Text style={[sl.tag, { color: accent.primary }]}>Your subjects</Text>
-        </View>
-        <Text style={[sl.title, { color: pg.text }]}>{"Add your\nsubjects"}</Text>
-        <Text style={[sl.body, { color: pg.sub }]}>Add your enrolled subjects — teachers, rooms, and schedules included. You can always add more later.</Text>
-
-        {courses.length > 0 ? (
-          <View style={{ width: "100%", gap: 10, marginBottom: 14 }}>
-            {courses.map((c, i) => (
-              <View key={i} style={[csl.card, { backgroundColor: pg.card, borderColor: pg.bord, borderTopColor: c.color, borderTopWidth: 3 }]}>
-                <View style={csl.cardTop}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[csl.cardName, { color: pg.text }]}>{c.name}</Text>
-                    {c.code ? <Text style={[csl.cardMeta, { color: pg.sub }]}>{c.code}</Text> : null}
-                    {c.instructor ? (
-                      <View style={csl.metaRow}>
-                        <Ionicons name="person-outline" size={12} color={pg.sub} />
-                        <Text style={[csl.cardMeta, { color: pg.sub }]}>{c.instructor}</Text>
-                      </View>
-                    ) : null}
-                    {c.room ? (
-                      <View style={csl.metaRow}>
-                        <Ionicons name="location-outline" size={12} color={pg.sub} />
-                        <Text style={[csl.cardMeta, { color: pg.sub }]}>{c.room}</Text>
-                      </View>
-                    ) : null}
-                    {c.timeslots.length > 0 && (
-                      <View style={csl.slotRow}>
-                        {c.timeslots.map((ts, ti) => (
-                          <View key={ti} style={[csl.slotTag, { backgroundColor: c.color + "22" }]}>
-                            <Text style={[csl.slotTxt, { color: c.color }]}>{ts.day} {ts.startTime}–{ts.endTime}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                  <View style={csl.cardActions}>
-                    <TouchableOpacity onPress={() => openEdit(i)} style={csl.iconBtn}>
-                      <Ionicons name="pencil-outline" size={16} color={pg.sub} />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => remove(i)} style={csl.iconBtn}>
-                      <Ionicons name="close-circle-outline" size={16} color="#E24B4A" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View style={[csl.emptyBox, { borderColor: pg.bord, backgroundColor: pg.card }]}>
-            <Ionicons name="library-outline" size={36} color={accent.primary + "66"} />
-            <Text style={[csl.emptyTxt, { color: pg.sub }]}>No subjects yet</Text>
-          </View>
-        )}
-
-        <TouchableOpacity onPress={openAdd} style={[csl.addBtn, { backgroundColor: accent.primary }]}>
-          <Ionicons name="add-circle-outline" size={18} color="#fff" />
-          <Text style={csl.addBtnTxt}>Add a subject</Text>
-        </TouchableOpacity>
-        <Text style={[{ fontSize: 12, color: pg.sub, textAlign: "center", marginTop: 12 }]}>
-          Subjects are optional — tap Next to continue
-        </Text>
-      </View>
-    );
-  }
-
-  // ADD / EDIT FORM
-  return (
-    <View style={sl.wrap}>
-      <TouchableOpacity onPress={() => { resetForm(); setStep("list"); }}
-        style={[csl.backBtn, { backgroundColor: pg.card, borderColor: pg.bord }]}>
-        <Ionicons name="arrow-back" size={16} color={accent.primary} />
-        <Text style={[csl.backTxt, { color: accent.primary }]}>Back</Text>
-      </TouchableOpacity>
-
-      <View style={[sl.tagPill, { backgroundColor: accent.primary + "18", marginTop: 12 }]}>
-        <Text style={[sl.tag, { color: accent.primary }]}>{editingIdx !== null ? "Edit subject" : "New subject"}</Text>
-      </View>
-      <Text style={[sl.title, { color: pg.text, fontSize: 26, marginBottom: 8 }]}>Subject details</Text>
-
-      <Text style={[csl.sectionLbl, { color: pg.sub }]}>Basic info</Text>
-      {[
-        { lbl: "Subject name *", val: cName, set: setCName, icon: "library-outline",  ph: "e.g. Mathematics, Biology" },
-        { lbl: "Subject code",   val: cCode, set: setCCode, icon: "code-outline",     ph: "e.g. MATH 101, BIO 201"    },
-      ].map(f => (
-        <View key={f.lbl} style={{ marginBottom: 12, width: "100%"}}>
-          <Text style={[sl.fieldLbl, { color: accent.primary }]}>{f.lbl}</Text>
-          <View style={[sl.inputRow, {
-  borderColor: cName ? accent.primary : pg.bord,
-  backgroundColor: pg.card,
-  paddingVertical: 16,    
-  paddingHorizontal: 16,  
-}]}>
-  <Ionicons name="library-outline" size={16} color={accent.primary} style={{ marginRight: 10 }} />
-  <TextInput style={[sl.input, { color: pg.text, fontSize: 15 }]} placeholder={f.ph}
-    placeholderTextColor={pg.sub} value={f.val} onChangeText={f.set} autoCapitalize="words" />
-</View>
-        </View>
-      ))}
-<View style={{ height: 8 }} />
-<Text style={[csl.sectionLbl, { color: pg.sub }]}>Teacher & location</Text>
-      {[
-        { lbl: "Teacher / professor", val: cInstructor, set: setCInstructor, icon: "person-outline",   ph: "e.g. Mr. Cruz, Ms. Santos" },
-        { lbl: "Room / location",     val: cRoom,       set: setCRoom,       icon: "location-outline", ph: "e.g. Room 204, Science Lab" },
-      ].map(f => (
-        <View key={f.lbl} style={{ marginBottom: 12,width: "100%" }}>
-          <Text style={[sl.fieldLbl, { color: accent.primary }]}>{f.lbl}</Text>
-          <View style={[sl.inputRow, { borderColor: f.val ? accent.primary : pg.bord, backgroundColor: pg.card }]}>
-            <Ionicons name={f.icon as any} size={15} color={accent.primary} style={{ marginRight: 8 }} />
-            <TextInput style={[sl.input, { color: pg.text }]} placeholder={f.ph}
-              placeholderTextColor={pg.sub} value={f.val} onChangeText={f.set} autoCapitalize="words" />
-          </View>
-        </View>
-      ))}
-
-      <Text style={[csl.sectionLbl, { color: pg.sub }]}>Subject color</Text>
-      <View style={{ flexDirection: "row", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
-        {COURSE_COLORS.map(c => (
-          <TouchableOpacity key={c} onPress={() => setCColor(c)}
-            style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: c,
-              borderWidth: cColor === c ? 3 : 0, borderColor: "#fff",
-              alignItems: "center", justifyContent: "center", elevation: cColor === c ? 4 : 0 }}>
-            {cColor === c && <Ionicons name="checkmark" size={16} color="#fff" />}
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <View style={csl.scheduleHeader}>
-        <View>
-          <Text style={[csl.sectionLbl, { color: pg.sub, marginBottom: 2 }]}>Class schedule</Text>
-          <Text style={[{ fontSize: 11, color: pg.sub }]}>Days and times this class meets</Text>
-        </View>
-        <TouchableOpacity onPress={addSlot} style={[csl.addSlotBtn, { backgroundColor: cColor + "22", borderColor: cColor + "50" }]}>
-          <Ionicons name="add" size={16} color={cColor} />
-          <Text style={[csl.addSlotTxt, { color: cColor }]}>Add slot</Text>
-        </TouchableOpacity>
-      </View>
-
-      {timeslots.length === 0 ? (
-        <View style={[csl.noSlotsBox, { borderColor: pg.bord, backgroundColor: pg.card }]}>
-          <Ionicons name="time-outline" size={22} color={pg.sub} />
-          <Text style={[{ fontSize: 12, color: pg.sub, textAlign: "center", marginTop: 4 }]}>
-            No schedule added yet.{"\n"}Tap "Add slot" to set meeting days and times.
-          </Text>
-        </View>
-      ) : (
-        timeslots.map((ts, idx) => (
-          <View key={idx} style={[csl.slotCard, { borderColor: cColor + "40", backgroundColor: pg.card }]}>
-            <Text style={[csl.slotFieldLbl, { color: accent.primary }]}>Day</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
-              <View style={{ flexDirection: "row", gap: 6 }}>
-                {DAYS.map(d => (
-                  <TouchableOpacity key={d} onPress={() => updateSlot(idx, "day", d)}
-                    style={[csl.dayChip, { backgroundColor: ts.day === d ? cColor : pg.bg, borderColor: ts.day === d ? cColor : pg.bord }]}>
-                    <Text style={[csl.dayChipTxt, { color: ts.day === d ? "#fff" : pg.sub }]}>{d}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
-            <Text style={[csl.slotFieldLbl, { color: accent.primary }]}>Time</Text>
-            <View style={csl.timeRow}>
-  {["startTime", "endTime"].map((k, ti) => (
-    <View key={k} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6 }}>
-      <View style={[csl.timeField, { borderColor: pg.bord, backgroundColor: pg.bg, flex: 1 }]}>
-        <Ionicons name="time-outline" size={13} color={pg.sub} />
-        <TextInput
-          style={[csl.timeInput, { color: pg.text }]}
-          placeholder={ti === 0 ? "08:00 AM" : "09:30 AM"}
-          placeholderTextColor={pg.sub}
-          value={ts[k as keyof typeof ts]}
-          onChangeText={(v) => updateSlot(idx, k, v)}
-        />
-      </View>
-
-      {/* Arrow BETWEEN start and end */}
-      {ti === 0 && (
-        <Text style={[csl.timeSep, { color: pg.sub }]}>→</Text>
-      )}
-    </View>
-  ))}
-
-  <TouchableOpacity onPress={() => removeSlot(idx)} style={csl.removeSlotBtn}>
-    <Ionicons name="trash-outline" size={16} color="#E24B4A" />
-  </TouchableOpacity>
-</View>
-          </View>
-        ))
-      )}
-
-      <TouchableOpacity onPress={save} disabled={!cName.trim()}
-        style={[csl.saveBtn, { backgroundColor: cName.trim() ? cColor : pg.bord, marginTop: 16 }]}>
-        <Ionicons name={editingIdx !== null ? "checkmark-circle-outline" : "add-circle-outline"} size={18} color="#fff" />
-        <Text style={csl.saveBtnTxt}>{editingIdx !== null ? "Update subject" : "Add this subject"}</Text>
-      </TouchableOpacity>
-      <View style={{ height: 20 }} />
-    </View>
-  );
-}
 function AppearanceSlide({ accent, pg, mode, scheme, setScheme, setMode, SCHEMES }: SP & any) {
   return (
     <View style={sl.wrap}>
@@ -643,7 +418,250 @@ function AppearanceSlide({ accent, pg, mode, scheme, setScheme, setMode, SCHEMES
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SLIDE 4 — Ready
+// SLIDE 4 — Courses
+// ─────────────────────────────────────────────────────────────────────────────
+function CourseSetupSlide({ accent, pg, courses, setCourses }: SP & {
+  courses: OnboardingCourse[];
+  setCourses: (c: OnboardingCourse[]) => void;
+}) {
+  const [step, setStep]               = useState<"list" | "add">("list");
+  const [cName, setCName]             = useState("");
+  const [cCode, setCCode]             = useState("");
+  const [cInstructor, setCInstructor] = useState("");
+  const [cRoom, setCRoom]             = useState("");
+  const [cColor, setCColor]           = useState(COURSE_COLORS[0]);
+  const [timeslots, setTimeslots]     = useState<{ day: string; startTime: string; endTime: string }[]>([]);
+  const [editingIdx, setEditingIdx]   = useState<number | null>(null);
+
+  const resetForm = () => { setCName(""); setCCode(""); setCInstructor(""); setCRoom(""); setCColor(COURSE_COLORS[0]); setTimeslots([]); setEditingIdx(null); };
+
+  const openAdd  = () => { resetForm(); setStep("add"); };
+  const openEdit = (i: number) => {
+    const c = courses[i];
+    setCName(c.name); setCCode(c.code); setCInstructor(c.instructor);
+    setCRoom(c.room); setCColor(c.color); setTimeslots([...c.timeslots]);
+    setEditingIdx(i); setStep("add");
+  };
+
+  const save = () => {
+    if (!cName.trim()) return;
+    const entry: OnboardingCourse = { name: cName.trim(), code: cCode.trim(), instructor: cInstructor.trim(), room: cRoom.trim(), color: cColor, timeslots };
+    if (editingIdx !== null) {
+      const u = [...courses]; u[editingIdx] = entry; setCourses(u);
+    } else {
+      setCourses([...courses, entry]);
+    }
+    resetForm(); setStep("list");
+  };
+
+  const remove     = (i: number) => setCourses(courses.filter((_, idx) => idx !== i));
+  const addSlot    = () => setTimeslots(ts => [...ts, { day: "Mon", startTime: "08:00 AM", endTime: "09:30 AM" }]);
+  const updateSlot = (i: number, k: string, v: string) => setTimeslots(ts => ts.map((t, idx) => idx === i ? { ...t, [k]: v } : t));
+  const removeSlot = (i: number) => setTimeslots(ts => ts.filter((_, idx) => idx !== i));
+
+  if (step === "list") {
+    return (
+      <View style={sl.wrap}>
+        <View style={[sl.iconCircleSmall, { backgroundColor: accent.primary + "18" }]}>
+          <Ionicons name="library-outline" size={32} color={accent.primary} />
+        </View>
+        <View style={[sl.tagPill, { backgroundColor: accent.primary + "18" }]}>
+          <Text style={[sl.tag, { color: accent.primary }]}>Your subjects</Text>
+        </View>
+        <Text style={[sl.title, { color: pg.text }]}>{"Add your\nsubjects"}</Text>
+        <Text style={[sl.body, { color: pg.sub }]}>Add your enrolled subjects — teachers, rooms, and schedules included. You can always add more later.</Text>
+
+        {courses.length > 0 ? (
+          <View style={{ width: "100%", gap: 10, marginBottom: 14 }}>
+            {courses.map((c, i) => (
+              <View key={i} style={[csl.card, { backgroundColor: pg.card, borderColor: pg.bord, borderTopColor: c.color, borderTopWidth: 3 }]}>
+                <View style={csl.cardTop}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[csl.cardName, { color: pg.text }]}>{c.name}</Text>
+                    {c.code ? <Text style={[csl.cardMeta, { color: pg.sub }]}>{c.code}</Text> : null}
+                    {c.instructor ? (
+                      <View style={csl.metaRow}>
+                        <Ionicons name="person-outline" size={12} color={pg.sub} />
+                        <Text style={[csl.cardMeta, { color: pg.sub }]}>{c.instructor}</Text>
+                      </View>
+                    ) : null}
+                    {c.room ? (
+                      <View style={csl.metaRow}>
+                        <Ionicons name="location-outline" size={12} color={pg.sub} />
+                        <Text style={[csl.cardMeta, { color: pg.sub }]}>{c.room}</Text>
+                      </View>
+                    ) : null}
+                    {c.timeslots.length > 0 && (
+                      <View style={csl.slotRow}>
+                        {c.timeslots.map((ts, ti) => (
+                          <View key={ti} style={[csl.slotTag, { backgroundColor: c.color + "22" }]}>
+                            <Text style={[csl.slotTxt, { color: c.color }]}>{ts.day} {ts.startTime}–{ts.endTime}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                  <View style={csl.cardActions}>
+                    <TouchableOpacity onPress={() => openEdit(i)} style={csl.iconBtn}>
+                      <Ionicons name="pencil-outline" size={16} color={pg.sub} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => remove(i)} style={csl.iconBtn}>
+                      <Ionicons name="close-circle-outline" size={16} color="#E24B4A" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={[csl.emptyBox, { borderColor: pg.bord, backgroundColor: pg.card }]}>
+            <Ionicons name="library-outline" size={36} color={accent.primary + "66"} />
+            <Text style={[csl.emptyTxt, { color: pg.sub }]}>No subjects yet</Text>
+          </View>
+        )}
+
+        <TouchableOpacity onPress={openAdd} style={[csl.addBtn, { backgroundColor: accent.primary }]}>
+          <Ionicons name="add-circle-outline" size={18} color="#fff" />
+          <Text style={csl.addBtnTxt}>Add a subject</Text>
+        </TouchableOpacity>
+        <Text style={[{ fontSize: 12, color: pg.sub, textAlign: "center", marginTop: 12 }]}>
+          Subjects are optional — tap Next to continue
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={sl.wrap}>
+      <TouchableOpacity onPress={() => { resetForm(); setStep("list"); }}
+        style={[csl.backBtn, { backgroundColor: pg.card, borderColor: pg.bord }]}>
+        <Ionicons name="arrow-back" size={16} color={accent.primary} />
+        <Text style={[csl.backTxt, { color: accent.primary }]}>Back</Text>
+      </TouchableOpacity>
+
+      <View style={[sl.tagPill, { backgroundColor: accent.primary + "18", marginTop: 12 }]}>
+        <Text style={[sl.tag, { color: accent.primary }]}>{editingIdx !== null ? "Edit subject" : "New subject"}</Text>
+      </View>
+      <Text style={[sl.title, { color: pg.text, fontSize: 26, marginBottom: 8 }]}>Subject details</Text>
+
+      <Text style={[csl.sectionLbl, { color: pg.sub }]}>Basic info</Text>
+      {[
+        { lbl: "Subject name *", val: cName, set: setCName, icon: "library-outline",  ph: "e.g. Mathematics, Biology" },
+        { lbl: "Subject code",   val: cCode, set: setCCode, icon: "code-outline",     ph: "e.g. MATH 101, BIO 201"    },
+      ].map(f => (
+        <View key={f.lbl} style={{ marginBottom: 12, width: "100%"}}>
+          <Text style={[sl.fieldLbl, { color: accent.primary }]}>{f.lbl}</Text>
+          <View style={[sl.inputRow, {
+            borderColor: cName ? accent.primary : pg.bord,
+            backgroundColor: pg.card,
+            paddingVertical: 16,
+            paddingHorizontal: 16,
+          }]}>
+            <Ionicons name="library-outline" size={16} color={accent.primary} style={{ marginRight: 10 }} />
+            <TextInput style={[sl.input, { color: pg.text, fontSize: 15 }]} placeholder={f.ph}
+              placeholderTextColor={pg.sub} value={f.val} onChangeText={f.set} autoCapitalize="words" />
+          </View>
+        </View>
+      ))}
+      <View style={{ height: 8 }} />
+      <Text style={[csl.sectionLbl, { color: pg.sub }]}>Teacher & location</Text>
+      {[
+        { lbl: "Teacher / professor", val: cInstructor, set: setCInstructor, icon: "person-outline",   ph: "e.g. Mr. Cruz, Ms. Santos" },
+        { lbl: "Room / location",     val: cRoom,       set: setCRoom,       icon: "location-outline", ph: "e.g. Room 204, Science Lab" },
+      ].map(f => (
+        <View key={f.lbl} style={{ marginBottom: 12, width: "100%" }}>
+          <Text style={[sl.fieldLbl, { color: accent.primary }]}>{f.lbl}</Text>
+          <View style={[sl.inputRow, { borderColor: f.val ? accent.primary : pg.bord, backgroundColor: pg.card }]}>
+            <Ionicons name={f.icon as any} size={15} color={accent.primary} style={{ marginRight: 8 }} />
+            <TextInput style={[sl.input, { color: pg.text }]} placeholder={f.ph}
+              placeholderTextColor={pg.sub} value={f.val} onChangeText={f.set} autoCapitalize="words" />
+          </View>
+        </View>
+      ))}
+
+      <Text style={[csl.sectionLbl, { color: pg.sub }]}>Subject color</Text>
+      <View style={{ flexDirection: "row", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
+        {COURSE_COLORS.map(c => (
+          <TouchableOpacity key={c} onPress={() => setCColor(c)}
+            style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: c,
+              borderWidth: cColor === c ? 3 : 0, borderColor: "#fff",
+              alignItems: "center", justifyContent: "center", elevation: cColor === c ? 4 : 0 }}>
+            {cColor === c && <Ionicons name="checkmark" size={16} color="#fff" />}
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <View style={csl.scheduleHeader}>
+        <View>
+          <Text style={[csl.sectionLbl, { color: pg.sub, marginBottom: 2 }]}>Class schedule</Text>
+          <Text style={[{ fontSize: 11, color: pg.sub }]}>Days and times this class meets</Text>
+        </View>
+        <TouchableOpacity onPress={addSlot} style={[csl.addSlotBtn, { backgroundColor: cColor + "22", borderColor: cColor + "50" }]}>
+          <Ionicons name="add" size={16} color={cColor} />
+          <Text style={[csl.addSlotTxt, { color: cColor }]}>Add slot</Text>
+        </TouchableOpacity>
+      </View>
+
+      {timeslots.length === 0 ? (
+        <View style={[csl.noSlotsBox, { borderColor: pg.bord, backgroundColor: pg.card }]}>
+          <Ionicons name="time-outline" size={22} color={pg.sub} />
+          <Text style={[{ fontSize: 12, color: pg.sub, textAlign: "center", marginTop: 4 }]}>
+            No schedule added yet.{"\n"}Tap "Add slot" to set meeting days and times.
+          </Text>
+        </View>
+      ) : (
+        timeslots.map((ts, idx) => (
+          <View key={idx} style={[csl.slotCard, { borderColor: cColor + "40", backgroundColor: pg.card }]}>
+            <Text style={[csl.slotFieldLbl, { color: accent.primary }]}>Day</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+              <View style={{ flexDirection: "row", gap: 6 }}>
+                {DAYS.map(d => (
+                  <TouchableOpacity key={d} onPress={() => updateSlot(idx, "day", d)}
+                    style={[csl.dayChip, { backgroundColor: ts.day === d ? cColor : pg.bg, borderColor: ts.day === d ? cColor : pg.bord }]}>
+                    <Text style={[csl.dayChipTxt, { color: ts.day === d ? "#fff" : pg.sub }]}>{d}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+            <Text style={[csl.slotFieldLbl, { color: accent.primary }]}>Time</Text>
+            <View style={csl.timeRow}>
+              {["startTime", "endTime"].map((k, ti) => (
+                <View key={k} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <View style={[csl.timeField, { borderColor: pg.bord, backgroundColor: pg.bg, flex: 1 }]}>
+                    <Ionicons name="time-outline" size={13} color={pg.sub} />
+                    <TextInput
+                      style={[csl.timeInput, { color: pg.text }]}
+                      placeholder={ti === 0 ? "08:00 AM" : "09:30 AM"}
+                      placeholderTextColor={pg.sub}
+                      value={ts[k as keyof typeof ts]}
+                      onChangeText={(v) => updateSlot(idx, k, v)}
+                    />
+                  </View>
+                  {ti === 0 && (
+                    <Text style={[csl.timeSep, { color: pg.sub }]}>→</Text>
+                  )}
+                </View>
+              ))}
+              <TouchableOpacity onPress={() => removeSlot(idx)} style={csl.removeSlotBtn}>
+                <Ionicons name="trash-outline" size={16} color="#E24B4A" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ))
+      )}
+
+      <TouchableOpacity onPress={save} disabled={!cName.trim()}
+        style={[csl.saveBtn, { backgroundColor: cName.trim() ? cColor : pg.bord, marginTop: 16 }]}>
+        <Ionicons name={editingIdx !== null ? "checkmark-circle-outline" : "add-circle-outline"} size={18} color="#fff" />
+        <Text style={csl.saveBtnTxt}>{editingIdx !== null ? "Update subject" : "Add this subject"}</Text>
+      </TouchableOpacity>
+      <View style={{ height: 20 }} />
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SLIDE 5 — Ready
 // ─────────────────────────────────────────────────────────────────────────────
 function ReadySlide({ accent, pg, name }: SP & { name: string }) {
   return (
@@ -670,10 +688,10 @@ function ReadySlide({ accent, pg, name }: SP & { name: string }) {
 
       <View style={[sl.card, { borderColor: pg.bord, backgroundColor: pg.card }]}>
         {[
-          { icon: "library-outline",       text: "Check your subjects in the Courses tab" },
-          { icon: "add-circle-outline",    text: "Tap + on Home to add a schedule"        },
-          { icon: "warning-outline",       text: "Mark urgent to get priority reminders"  },
-          { icon: "color-palette-outline", text: "Change your theme anytime in Profile"   },
+          { icon: "library-outline",       text: "Check your subjects in the Courses tab"  },
+          { icon: "add-circle-outline",    text: "Tap + on Home to add a schedule"         },
+          { icon: "document-text-outline", text: "Open Notes to start your first note"     },
+          { icon: "color-palette-outline", text: "Change your theme anytime in Profile"    },
         ].map((tip, i) => (
           <View key={i} style={[sl.featRow, i > 0 && { borderTopWidth: 0.5, borderTopColor: pg.bord }]}>
             <View style={[sl.featIcon, { backgroundColor: accent.primary + "18" }]}>
@@ -727,57 +745,44 @@ const sl = StyleSheet.create({
   formWrap:        { width: "100%", gap: 14 },
   fieldWrap:       { gap: 5 },
   fieldLbl:        { fontSize: 12, fontWeight: "600", letterSpacing: 0.3, marginBottom: 5 },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 18, 
-    minHeight: 56, 
-    marginBottom: 14,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,     
-    lineHeight: 22,   
-  },
+  inputRow:        { flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 18, minHeight: 56, marginBottom: 14 },
+  input:           { flex: 1, fontSize: 16, lineHeight: 22 },
   sectionLbl:      { fontSize: 11, fontWeight: "700", letterSpacing: 0.5, marginBottom: 10, textTransform: "uppercase" },
 });
 
 const csl = StyleSheet.create({
-  card:          { borderWidth: 1, borderRadius: 14, padding: 14, width: "100%" },
-  cardTop:       { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  cardName:      { fontSize: 14, fontWeight: "600", marginBottom: 2 },
-  cardMeta:      { fontSize: 12 },
-  metaRow:       { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
-  slotRow:       { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 8 },
-  slotTag:       { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },
-  slotTxt:       { fontSize: 10, fontWeight: "500" },
-  cardActions:   { flexDirection: "row", gap: 4 },
-  iconBtn:       { padding: 6 },
-  emptyBox:      { width: "100%", alignItems: "center", paddingVertical: 32, gap: 8, marginBottom: 8, borderWidth: 1, borderRadius: 14, borderStyle: "dashed" },
-  emptyTxt:      { fontSize: 13, fontWeight: "500" },
-  addBtn:        { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 14, paddingVertical: 14 },
-  addBtnTxt:     { color: "#fff", fontSize: 15, fontWeight: "600" },
-  backBtn:       { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, alignSelf: "flex-start", borderWidth: 0.5 },
-  backTxt:       { fontSize: 13, fontWeight: "500" },
-  sectionLbl:    { fontSize: 11, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 8 },
-  scheduleHeader:{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 8 },
-  addSlotBtn:    { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
-  addSlotTxt:    { fontSize: 12, fontWeight: "600" },
-  noSlotsBox:    { width: "100%", alignItems: "center", paddingVertical: 20, borderWidth: 1, borderRadius: 12, marginBottom: 12, gap: 4 },
-  slotCard:      { width: "100%", borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 10 },
-  slotFieldLbl:  { fontSize: 11, fontWeight: "600", letterSpacing: 0.3, marginBottom: 6 },
-  dayChip:       { borderWidth: 1, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6 },
-  dayChipTxt:    { fontSize: 12, fontWeight: "500" },
-  timeRow:       { flexDirection: "row", alignItems: "center", gap: 8 },
-  timeField:     { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 9 },
-  timeInput:     { flex: 1, fontSize: 13 },
-  timeSep:       { fontSize: 16 },
-  removeSlotBtn: { padding: 4 },
-  saveBtn:       { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 14, paddingVertical: 14 },
-  saveBtnTxt:    { color: "#fff", fontSize: 15, fontWeight: "600" },
+  card:           { borderWidth: 1, borderRadius: 14, padding: 14, width: "100%" },
+  cardTop:        { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  cardName:       { fontSize: 14, fontWeight: "600", marginBottom: 2 },
+  cardMeta:       { fontSize: 12 },
+  metaRow:        { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  slotRow:        { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 8 },
+  slotTag:        { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },
+  slotTxt:        { fontSize: 10, fontWeight: "500" },
+  cardActions:    { flexDirection: "row", gap: 4 },
+  iconBtn:        { padding: 6 },
+  emptyBox:       { width: "100%", alignItems: "center", paddingVertical: 32, gap: 8, marginBottom: 8, borderWidth: 1, borderRadius: 14, borderStyle: "dashed" },
+  emptyTxt:       { fontSize: 13, fontWeight: "500" },
+  addBtn:         { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 14, paddingVertical: 14 },
+  addBtnTxt:      { color: "#fff", fontSize: 15, fontWeight: "600" },
+  backBtn:        { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, alignSelf: "flex-start", borderWidth: 0.5 },
+  backTxt:        { fontSize: 13, fontWeight: "500" },
+  sectionLbl:     { fontSize: 11, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 8 },
+  scheduleHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 8 },
+  addSlotBtn:     { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
+  addSlotTxt:     { fontSize: 12, fontWeight: "600" },
+  noSlotsBox:     { width: "100%", alignItems: "center", paddingVertical: 20, borderWidth: 1, borderRadius: 12, marginBottom: 12, gap: 4 },
+  slotCard:       { width: "100%", borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 10 },
+  slotFieldLbl:   { fontSize: 11, fontWeight: "600", letterSpacing: 0.3, marginBottom: 6 },
+  dayChip:        { borderWidth: 1, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6 },
+  dayChipTxt:     { fontSize: 12, fontWeight: "500" },
+  timeRow:        { flexDirection: "row", alignItems: "center", gap: 8 },
+  timeField:      { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 9 },
+  timeInput:      { flex: 1, fontSize: 13 },
+  timeSep:        { fontSize: 16 },
+  removeSlotBtn:  { padding: 4 },
+  saveBtn:        { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 14, paddingVertical: 14 },
+  saveBtnTxt:     { color: "#fff", fontSize: 15, fontWeight: "600" },
 });
 
 const asl = StyleSheet.create({

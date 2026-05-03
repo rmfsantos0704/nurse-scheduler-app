@@ -18,62 +18,67 @@ const SCHEMES: { key: ColorScheme; label: string; color: string }[] = [
 ];
 
 const FAQ = [
+  // ── Top 4 always visible ──────────────────────────────────────────────
   {
-    q: "How do I add a schedule for today?",
-    a: "On the Home tab, tap 'Add schedule' in the Quick Actions section or the empty state button. Fill in the title, type, date, time, and optional course link — then tap 'Add to schedule'.",
+    q: "How do I add a schedule?",
+    a: "Tap the + button on the Home tab. Fill in the title, type, date, time, and optionally link a course, then tap Save.",
   },
   {
-    q: "Why isn't my schedule showing on the Home tab?",
-    a: "The Home tab only shows schedules for today. If you added a schedule for a different date, check the Calendar tab or tap 'Total' in the overview cards to see all schedules.",
-  },
-  {
-    q: "What are the different schedule types?",
-    a: "SnowEd supports: Class, Quiz, Exam, Activity, Study, Review, Duty, and General. Each type has its own color to help you identify tasks at a glance.",
+    q: "Why isn't my schedule showing on Home?",
+    a: "Home only shows today's schedules. For other dates, use the Calendar tab or tap 'Total' in the overview cards.",
   },
   {
     q: "How do urgent reminders work?",
-    a: "When adding a schedule, toggle 'Mark as urgent'. Urgent tasks appear in the Reminders tab and trigger a high-priority notification that can bypass silent mode on Android.",
+    a: "Toggle 'Mark as urgent' when adding a schedule. Urgent tasks appear in the Reminders tab and trigger a high-priority notification.",
   },
   {
-    q: "How does 'When to remind' work?",
-    a: "Choose how early you want a notification — options range from 'At start time' to '1 day before'. The notification fires at your chosen offset before the schedule's start time.",
+    q: "How do I delete multiple schedules?",
+    a: "On the Home tab tap 'Select' next to 'Schedule today', pick the cards you want, then tap Delete. Long-pressing a card also enters selection mode.",
+  },
+
+  // ── Hidden behind 'Show more' ─────────────────────────────────────────
+  {
+    q: "What are the schedule types?",
+    a: "Quiz, Activity, Review, Class, Duty, Study, and General. Each has its own color for quick identification.",
   },
   {
     q: "Can I edit a schedule after creating it?",
-    a: "Yes, as long as it's not overdue or completed. Tap any schedule card to open its details, then tap Edit. Overdue and completed schedules are locked from editing.",
+    a: "Yes, as long as it isn't overdue or completed. Tap the card to open details, then tap Edit.",
   },
   {
-    q: "Why can't I edit a schedule?",
-    a: "Schedules that are already overdue (past their start time and not completed) or marked as done cannot be edited. You can still delete them from the detail view.",
+    q: "How does 'When to remind' work?",
+    a: "Choose how early you want a notification — from 'At start time' up to '1 day before'. The alert fires at your chosen offset before the schedule starts.",
   },
   {
     q: "How do I link a schedule to a course?",
-    a: "When adding or editing a schedule, scroll to 'Link to course' and tap a course chip. Linked schedules appear inside that course's detail view under the Courses tab.",
+    a: "When adding or editing a schedule, scroll to 'Link to course' and tap a course chip. Linked schedules appear inside that course's detail view.",
   },
   {
     q: "How do I add and manage courses?",
-    a: "Go to the Courses tab and tap Add. Fill in the subject name, code, teacher, room, color, and class schedule slots. Tap a course card to see its linked schedules and stats.",
+    a: "Go to the Courses tab and tap Add. Fill in the subject name, code, teacher, room, color, and class schedule slots.",
   },
   {
     q: "What does the Calendar tab show?",
-    a: "A full monthly calendar with colored dots showing which days have schedules. Tap any date to see that day's tasks grouped by overdue, pending, and completed. Tap 'View all [month] schedules' for a searchable full list.",
+    a: "A full monthly calendar with colored dots on days that have schedules. Tap any date to see tasks grouped by overdue, pending, and completed.",
   },
   {
-    q: "What does the Reminders tab show?",
-    a: "Only schedules marked as urgent for today, grouped into Overdue, Today, and Completed sections. Non-urgent schedules don't appear here — manage those from the Home or Calendar tab.",
+    q: "How do I delete multiple notes?",
+    a: "Long-press any note card to enter select mode, tap to pick notes, then tap Delete. Use 'Select all' to pick everything at once.",
   },
   {
-    q: "How do I delete multiple notes at once?",
-    a: "Long press any note card to enter select mode. Checkmarks appear on all cards — tap to select, then tap 'Select all' to select everything, or tap 'Delete' to remove the selected notes.",
+    q: "How does the streak work?",
+    a: "Your streak increments each day you complete all of today's schedules. Miss a day and it resets to zero.",
   },
 ];
 
+const ALWAYS_VISIBLE = 4; // number of questions shown before "Show more"
+
 export default function Settings() {
   const { colors, mode, scheme, toggleMode, setScheme } = useTheme();
-  const [faqOpen, setFaqOpen] = useState<number | null>(null);
-  const [dnd,     setDnd]     = useState(false);
+  const [faqOpen,    setFaqOpen]    = useState<number | null>(null);
+  const [showAllFaq, setShowAllFaq] = useState(false);
+  const [dnd,        setDnd]        = useState(false);
 
-  // Load DND state from storage
   useEffect(() => {
     AsyncStorage.getItem("dndEnabled").then(v => {
       if (v === "true") setDnd(true);
@@ -90,7 +95,6 @@ export default function Settings() {
         enableVibrate: false,
         sound: undefined,
       }).catch(() => {});
-      // On iOS just cancel all pending when DND on (simplest approach)
       if (Platform.OS === "ios") {
         await Notifications.cancelAllScheduledNotificationsAsync();
       }
@@ -105,6 +109,13 @@ export default function Settings() {
     }
   };
 
+  // Collapse any open answer when hiding extra questions
+  const handleShowLess = () => {
+    if (faqOpen !== null && faqOpen >= ALWAYS_VISIBLE) setFaqOpen(null);
+    setShowAllFaq(false);
+  };
+
+  const visibleFaq = showAllFaq ? FAQ : FAQ.slice(0, ALWAYS_VISIBLE);
   const c = colors;
 
   return (
@@ -126,7 +137,6 @@ export default function Settings() {
             <Text style={[s.cardTitle, { color: c.textPrimary }]}>Appearance</Text>
           </View>
 
-          {/* Dark / light */}
           <View style={[s.row, { borderTopColor: c.cardBorder }]}>
             <View style={s.rowLeft}>
               <Ionicons name={mode === "dark" ? "moon" : "sunny-outline"} size={20} color={c.primary} />
@@ -142,7 +152,6 @@ export default function Settings() {
             />
           </View>
 
-          {/* Color scheme */}
           <View style={[s.schemeSection, { borderTopColor: c.cardBorder }]}>
             <Text style={[s.rowLabel, { color: c.textPrimary, marginBottom: 12 }]}>Color theme</Text>
             <View style={s.schemeRow}>
@@ -176,7 +185,6 @@ export default function Settings() {
           <View style={s.cardHeaderPad}>
             <Text style={[s.cardTitle, { color: c.textPrimary }]}>Notifications</Text>
           </View>
-
           <View style={[s.row, { borderTopColor: c.cardBorder }]}>
             <View style={s.rowLeft}>
               <Ionicons
@@ -205,7 +213,8 @@ export default function Settings() {
           <View style={s.cardHeaderPad}>
             <Text style={[s.cardTitle, { color: c.textPrimary }]}>Help & FAQ</Text>
           </View>
-          {FAQ.map((item, idx) => (
+
+          {visibleFaq.map((item, idx) => (
             <View key={idx}>
               <TouchableOpacity
                 style={[s.faqRow, { borderTopColor: c.cardBorder }]}
@@ -215,7 +224,8 @@ export default function Settings() {
                 <Text style={[s.faqQ, { color: c.textPrimary }]}>{item.q}</Text>
                 <Ionicons
                   name={faqOpen === idx ? "chevron-up" : "chevron-down"}
-                  size={16} color={c.textSecondary}
+                  size={16}
+                  color={c.textSecondary}
                 />
               </TouchableOpacity>
               {faqOpen === idx && (
@@ -225,6 +235,24 @@ export default function Settings() {
               )}
             </View>
           ))}
+
+          {/* ✅ Show more / Show less toggle */}
+          <TouchableOpacity
+            style={[s.showMoreBtn, { borderTopColor: c.cardBorder }]}
+            onPress={showAllFaq ? handleShowLess : () => setShowAllFaq(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={[s.showMoreTxt, { color: c.primary }]}>
+              {showAllFaq
+                ? "Show less"
+                : `Show ${FAQ.length - ALWAYS_VISIBLE} more questions`}
+            </Text>
+            <Ionicons
+              name={showAllFaq ? "chevron-up" : "chevron-down"}
+              size={14}
+              color={c.primary}
+            />
+          </TouchableOpacity>
         </View>
 
         {/* ── ABOUT ── */}
@@ -276,4 +304,7 @@ const s = StyleSheet.create({
   faqQ:           { fontSize: 13, fontWeight: "500", flex: 1, marginRight: 8 },
   faqAnswer:      { paddingHorizontal: 16, paddingVertical: 12 },
   faqA:           { fontSize: 13, lineHeight: 20 },
+  // ✅ Show more / less button
+  showMoreBtn:    { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderTopWidth: 0.5, paddingVertical: 13 },
+  showMoreTxt:    { fontSize: 13, fontWeight: "500" },
 });

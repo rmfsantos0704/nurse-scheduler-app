@@ -97,12 +97,13 @@ type ThemeContextType = {
   colors: ThemeColors;
   toggleMode: () => void;
   setScheme: (s: ColorScheme) => void;
+  setMode: (m: ThemeMode) => void;
 };
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setMode] = useState<ThemeMode>("light");
+  const [mode, setModeState] = useState<ThemeMode>("light");
   const [scheme, setSchemeState] = useState<ColorScheme>("pink");
   const [isInitialized, setIsInitialized] = useState(false);
 
@@ -112,7 +113,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.multiGet(["themeMode", "themeScheme"]).then(pairs => {
       const m = pairs[0][1] as ThemeMode | null;
       const sc = pairs[1][1] as ColorScheme | null;
-      if (m) setMode(m);
+      if (m) setModeState(m);
       if (sc) setSchemeState(sc);
     }).catch(() => {
       // If AsyncStorage fails, we already have defaults
@@ -121,8 +122,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const toggleMode = () => {
     const next = mode === "light" ? "dark" : "light";
-    setMode(next);
+    setModeState(next);
     AsyncStorage.setItem("themeMode", next);
+  };
+
+  const setMode = (m: ThemeMode) => {
+    setModeState(m);
+    AsyncStorage.setItem("themeMode", m);
   };
 
   const setScheme = (s: ColorScheme) => {
@@ -133,7 +139,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const colors = SCHEMES[scheme][mode];
 
   return (
-    <ThemeContext.Provider value={{ mode, scheme, colors, toggleMode, setScheme }}>
+    <ThemeContext.Provider value={{ mode, scheme, colors, toggleMode, setScheme, setMode }}>
       {children}
     </ThemeContext.Provider>
   );

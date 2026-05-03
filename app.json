@@ -16,7 +16,8 @@
         "backgroundColor": "#FFF5F8"
       },
       "permissions": [
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECORD_AUDIO"
       ],
       "package": "com.snowed.app"
     },
@@ -34,6 +35,11 @@
         }
       ],
       "expo-sqlite"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e31483f8-dfa3-4354-8657-27005728ac3b"
+      }
+    }
   }
 }

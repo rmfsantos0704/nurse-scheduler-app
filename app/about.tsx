@@ -77,11 +77,11 @@ export default function About() {
         <View style={[s.card, { backgroundColor: c.card, borderColor: c.cardBorder }]}>
           <Text style={[s.cardTitle, { color: c.textPrimary }]}>Built with</Text>
           {[
-            { label: "React Native + Expo",        desc: "Cross-platform mobile framework"         },
-            { label: "Expo Router",                desc: "File-based navigation"                   },
-            { label: "Node.js + Express",          desc: "Backend API server"                      },
-            { label: "MongoDB Atlas",              desc: "Cloud database"                          },
-            { label: "react-native-pell-rich-editor", desc: "Rich text editing for Notes"         },
+            { label: "React Native + Expo",           desc: "Cross-platform mobile framework"    },
+            { label: "Expo Router",                   desc: "File-based navigation"              },
+            { label: "SQLite (expo-sqlite)",          desc: "Offline-first local database"       }, // ✅ replaced MongoDB Atlas
+            { label: "Node.js + Express",             desc: "Backend API server"                 },
+            { label: "react-native-pell-rich-editor", desc: "Rich text editing for Notes"        },
           ].map((t, i) => (
             <View
               key={t.label}
@@ -95,7 +95,7 @@ export default function About() {
 
         {/* Footer note */}
         <Text style={[s.footer, { color: c.textSecondary }]}>
-          Made with ❤️ for students everywhere.{"\n"}SnowEd © 2025
+          Made with ❤️ for students everywhere.{"\n"}SnowEd © 2026 {/* ✅ updated year */}
         </Text>
 
         <View style={{ height: 50 }} />
