@@ -115,6 +115,23 @@ export default function Settings() {
     setShowAllFaq(false);
   };
 
+  const testOnboarding = () => {
+    Alert.alert(
+      "Test onboarding",
+      "You will return to the onboarding screens. Your saved schedules and notes will stay unchanged.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Start",
+          onPress: async () => {
+            await AsyncStorage.removeItem("onboardingDone");
+            router.replace("/onboarding");
+          },
+        },
+      ]
+    );
+  };
+
   const visibleFaq = showAllFaq ? FAQ : FAQ.slice(0, ALWAYS_VISIBLE);
   const c = colors;
 
@@ -270,6 +287,20 @@ export default function Settings() {
               <View>
                 <Text style={[s.rowLabel, { color: c.textPrimary }]}>About SnowEd</Text>
                 <Text style={[s.rowSub, { color: c.textSecondary }]}>Version, features & credits</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={c.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.row, { borderTopColor: c.cardBorder }]}
+            onPress={testOnboarding}
+            activeOpacity={0.7}
+          >
+            <View style={s.rowLeft}>
+              <Ionicons name="play-circle-outline" size={20} color={c.primary} />
+              <View>
+                <Text style={[s.rowLabel, { color: c.textPrimary }]}>Test onboarding</Text>
+                <Text style={[s.rowSub, { color: c.textSecondary }]}>Preview the welcome screens again</Text>
               </View>
             </View>
             <Ionicons name="chevron-forward" size={16} color={c.textSecondary} />

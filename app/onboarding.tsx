@@ -272,6 +272,7 @@ function WelcomeSlide({ accent, pg }: SP) {
           { icon: "calendar-outline",      text: "Schedule classes, quizzes & activities"    },
           { icon: "notifications-outline", text: "Smart notifications before tasks start"    },
           { icon: "document-text-outline", text: "Take notes and keep ideas organized"       },
+          { icon: "globe-outline",         text: "Research topics with Wikipedia"            },
         ].map((f, i) => (
           <View key={i} style={[sl.featRow, i > 0 && { borderTopWidth: 0.5, borderTopColor: pg.bord }]}>
             <View style={[sl.featIcon, { backgroundColor: accent.primary + "18" }]}>
@@ -295,6 +296,7 @@ function FeaturesSlide({ accent, pg }: SP) {
     { icon: "calendar-outline",      title: "Calendar",   desc: "Monthly view of all schedules. Tap any date to see full task details.", bg: "#EAF3DE", ic: "#639922" },
     { icon: "document-text-outline", title: "Notes",      desc: "A full notepad for jotting down ideas, summaries, and reminders per subject.", bg: "#E1F5EE", ic: "#1D9E75" },
     { icon: "notifications-outline", title: "Reminders",  desc: "Urgent tasks surfaced automatically — sorted by overdue, today, and upcoming.", bg: "#FCEBEB", ic: "#E24B4A" },
+    { icon: "globe-outline",         title: "Research",   desc: "Search Wikipedia for study topics, read articles, and save useful content to Notes.", bg: "#E6F1FB", ic: "#378ADD" },
     { icon: "color-palette-outline", title: "Themes",     desc: "5 color themes + light/dark mode. Saved across the whole app.", bg: "#FFE4EC", ic: "#D4537E" },
   ];
 

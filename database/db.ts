@@ -55,6 +55,8 @@ export async function initDb(): Promise<void> {
       id        TEXT PRIMARY KEY,
       title     TEXT NOT NULL DEFAULT 'Untitled',
       content   TEXT DEFAULT '',
+      images    TEXT DEFAULT '[]',
+      formatting TEXT DEFAULT '[]',
       courseId  TEXT,
       color     TEXT DEFAULT '#378ADD',
       createdAt TEXT DEFAULT (datetime('now')),
@@ -73,5 +75,20 @@ export async function initDb(): Promise<void> {
     }
   } catch (e) {
     console.error("Migration (completedAt) failed:", e);
+  }
+
+  try {
+    const noteColumns: any[] = await db.getAllAsync("PRAGMA table_info(notes)");
+    const columnNames = new Set(noteColumns.map(column => column.name));
+    if (!columnNames.has("images")) {
+      await db.execAsync("ALTER TABLE notes ADD COLUMN images TEXT DEFAULT '[]';");
+      console.log("Migration: added notes.images column.");
+    }
+    if (!columnNames.has("formatting")) {
+      await db.execAsync("ALTER TABLE notes ADD COLUMN formatting TEXT DEFAULT '[]';");
+      console.log("Migration: added notes.formatting column.");
+    }
+  } catch (e) {
+    console.error("Migration (note fields) failed:", e);
   }
 }

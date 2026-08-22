@@ -19,16 +19,18 @@ export function ScheduleCard({
   const safeTime  = item.startTime || "--:--";
 
   const typeColor = TYPE_COLORS[safeType] || colors.primary;
-  const typeBg    = TYPE_BG[safeType]    || "rgba(0,0,0,0.1)";
+  const typeBg    = TYPE_BG[safeType]    || "rgba(0,0,0,0.08)";
 
+  // Light mode → use the curated TYPE_BG tint
+  // Dark mode  → derive a tinted background from the color itself at low opacity
   const pillBg = mode === "dark" ? typeColor + "30" : typeBg;
-  const pillTextColor = typeColor;
 
   return (
     <View
       style={[
         s.schedItem,
         { backgroundColor: colors.card, borderColor: colors.cardBorder },
+        isOverdue && { borderColor: "#E24B4A", borderWidth: 1.5 },
         item.isUrgent && !item.isCompleted && {
           borderColor: colors.primary,
           borderWidth: 1,
@@ -68,7 +70,7 @@ export function ScheduleCard({
             mode === "dark" && s.typePillDark,
             mode === "dark" && { borderColor: typeColor + "60" },
           ]}>
-            <Text style={[s.typePillTxt, { color: pillTextColor }]}>
+            <Text style={[s.typePillTxt, { color: typeColor }]}>
               {safeType}
             </Text>
           </View>
@@ -98,7 +100,7 @@ export function ScheduleCard({
         )}
       </View>
 
-      {/* ACTIONS — edit + delete only, no complete checkbox */}
+      {/* ACTIONS */}
       <View style={s.actions}>
         <TouchableOpacity
           onPress={onEdit}

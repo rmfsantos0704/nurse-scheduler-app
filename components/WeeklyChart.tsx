@@ -12,7 +12,7 @@ function getLast7Days(): { label: string; dateStr: string; isToday: boolean }[] 
     const d = new Date();
     d.setDate(d.getDate() - i);
     days.push({
-      label: d.toLocaleDateString("en", { weekday: "narrow" }),
+      label: d.toLocaleDateString("en", { weekday: "short" }),
       dateStr: d.toISOString().slice(0, 10),
       isToday: i === 0,
     });

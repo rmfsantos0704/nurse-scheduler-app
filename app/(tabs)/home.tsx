@@ -9,8 +9,7 @@ import { useNotifications } from "../../hooks/useNotification";
 import { useCourses } from "../../hooks/useCourses";
 import { useStreak } from "../../hooks/useStreak";
 import { OverviewCards } from "../../components/OverviewCards";
-import { NextEventCard } from "../../components/NextEventCard";
-import { UrgentList } from "../../components/UrgentList";
+
 import { ScheduleFormModal } from "../../modals/ScheduleFormModal";
 import { OverviewModal } from "../../modals/OverviewModal";
 import { ScheduleDetailModal } from "../../components/ScheduleDetailModal";
@@ -223,30 +222,32 @@ export default function Home() {
             onPress={cat => { setOverviewCat(cat); setOverviewVisible(true); }}
           />
 
-          {/* Next event + Urgent */}
-          {(nextItem || urgentItems.length > 0) && (
-            <View style={s.twoColRow}>
-              {nextItem && (
-                <View style={s.twoColItem}>
-                  <Text style={[s.sec, { color: colors.textSecondary }]}>Next up</Text>
-                  <NextEventCard item={nextItem} colors={colors} />
-                </View>
-              )}
-              {urgentItems.length > 0 && (
-                <View style={s.twoColItem}>
-                  <Text style={[s.sec, { color: colors.textSecondary }]}>Needs attention</Text>
-                  <UrgentList items={urgentItems} colors={colors} />
-                </View>
-              )}
-            </View>
-          )}
+        
 
+          {/* SCHEDULE TODAY HEADER */}
           {/* SCHEDULE TODAY HEADER */}
           <View style={s.secRow}>
             <Text style={[s.sec, { color: colors.textSecondary, marginBottom: 0, marginTop: 0 }]}>
               Schedule today
             </Text>
             <View style={s.secActions}>
+              
+              {/* NEW: Add Button (Hidden during selection mode to keep layout clean) */}
+              {!selectionMode && (
+                <TouchableOpacity
+                  onPress={() => router.push("/add-schedule")}
+                  style={[
+                    s.secBtn, 
+                    { backgroundColor: colors.primary, borderColor: colors.primary, paddingHorizontal: 12 }
+                  ]}
+                >
+                  <Ionicons name="add" size={16} color="#ffffff" />
+                  <Text style={[s.secBtnTxt, { color: "#ffffff", fontWeight: "600" }]}>
+                    Add New
+                  </Text>
+                </TouchableOpacity>
+              )}
+
               {selectionMode ? (
                 <>
                   <TouchableOpacity
@@ -288,14 +289,13 @@ export default function Home() {
                     onPress={enterSelectionMode}
                     style={[s.secBtn, { borderColor: colors.cardBorder, backgroundColor: colors.card }]}
                   >
-                    <Ionicons name="trash-outline" size={14} color={colors.textSecondary} />
+                    <Ionicons name="checkmark-circle-outline" size={14} color={colors.textSecondary} />
                     <Text style={[s.secBtnTxt, { color: colors.textSecondary }]}>Select</Text>
                   </TouchableOpacity>
                 )
               )}
             </View>
           </View>
-
           <ScheduleTodayList
             items={items}
             colors={colors}
@@ -311,7 +311,7 @@ export default function Home() {
           <View style={{ height: 100 }} />
         </ScrollView>
 
-        <FAB onPress={() => router.push("/add-schedule")} color={colors.primary} />
+        
       </SafeScreen>
 
       <ScheduleFormModal
