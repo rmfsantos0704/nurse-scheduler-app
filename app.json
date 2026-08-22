@@ -15,6 +15,10 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "backgroundColor": "#FFF5F8"
       },
+      "notification": {
+        "icon": "./assets/images/notification-icon.png",
+        "color": "#D4537E"
+      },
       "permissions": [
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.RECORD_AUDIO"

@@ -11,7 +11,7 @@ import { useTheme } from "../context/ThemeContext";
 import { useCourses } from "../hooks/useCourses";
 import { useNotifications } from "../hooks/useNotification";
 import { scheduleService } from "../services/scheduleService";
-import { scheduleActivityNotification } from "../services/NotificationService";
+import { scheduleActivityNotification } from "../services/notificationService";
 import { SafeScreen } from "../components/SafeScreen";
 import { toTimeString, toDateString, buildDateTime } from "../utils/dateUtils";
 import type { ScheduleType } from "../constants/scheduleTypes";
@@ -26,8 +26,9 @@ const TYPE_COLORS: Record<string, string> = {
   Class: "#c5cf08", Duty: "#D4537E", Study: "#378ADD", General: "#21a702",
 };
 
-const REMIND_OPTIONS = [
-  { label: "5 min",  value: 5  },
+const REMIND_OPTIONS: { label: string; value: number | null }[] = [
+  { label: "Start time", value: null },
+  { label: "5 min",      value: 5   },
   { label: "15 min", value: 15 },
   { label: "30 min", value: 30 },
   { label: "1 hr",   value: 60 },
@@ -46,9 +47,10 @@ export default function AddSchedule() {
   const [selectedTime,     setSelectedTime]     = useState(new Date());
   const [showDatePicker,   setShowDatePicker]   = useState(false);
   const [showTimePicker,   setShowTimePicker]   = useState(false);
-  const [remindMinutes,    setRemindMinutes]    = useState(15);
+  const [remindMinutes,    setRemindMinutes]    = useState<number | null>(15);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [saving,           setSaving]           = useState(false);
+  const [descHeight,       setDescHeight]       = useState(80);
 
   // Refresh courses every time screen is focused
   useFocusEffect(
@@ -67,15 +69,15 @@ export default function AddSchedule() {
         title: title.trim(), type: selectedType, date: dateStr,
         startTime: timeStr, description: description.trim(),
         isUrgent, isCompleted: false, courseId: selectedCourseId,
-        reminderMinutesBefore: remindMinutes,
+        reminderMinutesBefore: remindMinutes ?? 0,
       });
       if (notifGranted) {
         const dt      = buildDateTime(dateStr, timeStr);
-        const trigger = new Date(dt.getTime() - remindMinutes * 60000);
+        const trigger = remindMinutes === null ? dt : new Date(dt.getTime() - remindMinutes * 60000);
         await scheduleActivityNotification(
           created._id, created.title, created.type,
           created.description ?? "", trigger > new Date() ? trigger : dt,
-          created.isUrgent ?? false, scheme
+          created.isUrgent ?? false, scheme, dt
         );
       }
       router.back();
@@ -123,7 +125,20 @@ export default function AddSchedule() {
           onChangeText={setTitle}
         />
 
-        {/* Course — moved up so it's easy to set context first */}
+        {/* Description */}
+        <Text style={[s.label, { color: colors.textSecondary }]}>Description</Text>
+        <TextInput
+          style={[s.input, s.multiline, { backgroundColor: colors.card, borderColor: colors.cardBorder, color: colors.textPrimary, height: Math.max(80, descHeight) }]}
+          placeholder="Optional notes..."
+          placeholderTextColor={colors.textSecondary}
+          value={description}
+          onChangeText={setDescription}
+          onContentSizeChange={e => setDescHeight(e.nativeEvent.contentSize.height + 16)}
+          multiline
+          scrollEnabled={false}
+        />
+
+        {/* Course */}
         {courses.length > 0 && (
           <>
             <Text style={[s.label, { color: colors.textSecondary }]}>Course</Text>
@@ -142,7 +157,7 @@ export default function AddSchedule() {
               </TouchableOpacity>
 
               {courses.map(c => {
-                const isActive = selectedCourseId === c._id;
+                const isActive  = selectedCourseId === c._id;
                 const chipColor = c.color || colors.primary;
                 return (
                   <TouchableOpacity
@@ -153,7 +168,6 @@ export default function AddSchedule() {
                       borderColor:     isActive ? chipColor : colors.cardBorder,
                     }]}
                   >
-                    {/* Color dot */}
                     <View style={[s.courseDot, { backgroundColor: chipColor }]} />
                     <View>
                       {c.code ? (
@@ -178,7 +192,10 @@ export default function AddSchedule() {
 
             {/* Selected course banner */}
             {selectedCourse && (
-              <View style={[s.selectedBanner, { backgroundColor: (selectedCourse.color || colors.primary) + "18", borderColor: (selectedCourse.color || colors.primary) + "44" }]}>
+              <View style={[s.selectedBanner, {
+                backgroundColor: (selectedCourse.color || colors.primary) + "18",
+                borderColor:     (selectedCourse.color || colors.primary) + "44",
+              }]}>
                 <View style={[s.courseDot, { backgroundColor: selectedCourse.color || colors.primary }]} />
                 <Text style={[s.selectedBannerTxt, { color: selectedCourse.color || colors.primary }]}>
                   {selectedCourse.code ? `${selectedCourse.code} — ${selectedCourse.name}` : selectedCourse.name}
@@ -253,14 +270,15 @@ export default function AddSchedule() {
             onChange={(_, t) => { setShowTimePicker(false); if (t) setSelectedTime(t); }}
           />
         )}
+
         {/* Reminder */}
         {notifGranted && (
           <>
-            <Text style={[s.label, { color: colors.textSecondary }]}>Remind me before</Text>
-            <View style={s.remindRow}>
+            <Text style={[s.label, { color: colors.textSecondary }]}>Remind me</Text>
+            <View style={s.remindGrid}>
               {REMIND_OPTIONS.map(opt => (
                 <TouchableOpacity
-                  key={opt.value}
+                  key={String(opt.value)}
                   onPress={() => setRemindMinutes(opt.value)}
                   style={[s.remindChip, {
                     backgroundColor: remindMinutes === opt.value ? colors.primary : colors.card,
@@ -275,17 +293,6 @@ export default function AddSchedule() {
             </View>
           </>
         )}
-        {/* Description */}
-        <Text style={[s.label, { color: colors.textSecondary }]}>Description</Text>
-        <TextInput
-          style={[s.input, s.multiline, { backgroundColor: colors.card, borderColor: colors.cardBorder, color: colors.textPrimary }]}
-          placeholder="Optional notes..."
-          placeholderTextColor={colors.textSecondary}
-          value={description}
-          onChangeText={setDescription}
-          multiline
-          numberOfLines={3}
-        />
 
         {/* Urgent */}
         <View style={[s.switchRow, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
@@ -301,8 +308,6 @@ export default function AddSchedule() {
           />
         </View>
 
-      
-
         <View style={{ height: 40 }} />
       </ScrollView>
     </SafeScreen>
@@ -310,34 +315,32 @@ export default function AddSchedule() {
 }
 
 const s = StyleSheet.create({
-  screen:           { flex: 1, padding: 16 },
-  header:           { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 0.5 },
-  backBtn:          { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  headerTitle:      { flex: 1, fontSize: 17, fontWeight: "600" },
-  saveBtn:          { borderRadius: 20, paddingHorizontal: 18, paddingVertical: 8, minWidth: 64, alignItems: "center" },
-  saveBtnTxt:       { color: "#fff", fontSize: 14, fontWeight: "500" },
-  label:            { fontSize: 12, fontWeight: "500", marginBottom: 6, marginTop: 12 },
-  input:            { borderWidth: 0.5, borderRadius: 10, padding: 12, fontSize: 14, marginBottom: 2 },
-  multiline:        { minHeight: 80, textAlignVertical: "top" },
-  inputRow:         { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 0.5, borderRadius: 10, padding: 12, marginBottom: 2 },
-  inputRowTxt:      { fontSize: 14, flex: 1 },
-  chipRow:          { marginBottom: 4 },
-  // Course chips — taller to fit code + name
-  courseChip:       { flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginRight: 8 },
-  courseDot:        { width: 8, height: 8, borderRadius: 4 },
-  courseChipCode:   { fontSize: 13, fontWeight: "600" },
-  courseChipName:   { fontSize: 11, marginTop: 1 },
-  courseChipTxt:    { fontSize: 13, fontWeight: "500" },
-  selectedBanner:   { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 0.5, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginTop: 8 },
-  selectedBannerTxt:{ flex: 1, fontSize: 13, fontWeight: "500" },
-  clearBtn:         { padding: 2 },
-  // Type chips
-  typeChip:         { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7, marginRight: 8 },
-  typeChipTxt:      { fontSize: 13, fontWeight: "500" },
-  switchRow:        { flexDirection: "row", alignItems: "center", borderWidth: 0.5, borderRadius: 12, padding: 14, marginTop: 12 },
-  switchLabel:      { fontSize: 14, fontWeight: "500" },
-  switchSub:        { fontSize: 12, marginTop: 2 },
-  remindRow:        { flexDirection: "row", gap: 8, marginBottom: 4 },
-  remindChip:       { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
-  remindChipTxt:    { fontSize: 13, fontWeight: "500" },
+  screen:            { flex: 1, padding: 16 },
+  header:            { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 0.5 },
+  backBtn:           { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  headerTitle:       { flex: 1, fontSize: 17, fontWeight: "600" },
+  saveBtn:           { borderRadius: 20, paddingHorizontal: 18, paddingVertical: 8, minWidth: 64, alignItems: "center" },
+  saveBtnTxt:        { color: "#fff", fontSize: 14, fontWeight: "500" },
+  label:             { fontSize: 12, fontWeight: "500", marginBottom: 6, marginTop: 12 },
+  input:             { borderWidth: 0.5, borderRadius: 10, padding: 12, fontSize: 14, marginBottom: 2 },
+  multiline:         { minHeight: 80, textAlignVertical: "top" },
+  inputRow:          { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 0.5, borderRadius: 10, padding: 12, marginBottom: 2 },
+  inputRowTxt:       { fontSize: 14, flex: 1 },
+  chipRow:           { marginBottom: 4 },
+  courseChip:        { flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginRight: 8 },
+  courseDot:         { width: 8, height: 8, borderRadius: 4 },
+  courseChipCode:    { fontSize: 13, fontWeight: "600" },
+  courseChipName:    { fontSize: 11, marginTop: 1 },
+  courseChipTxt:     { fontSize: 13, fontWeight: "500" },
+  selectedBanner:    { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 0.5, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginTop: 8 },
+  selectedBannerTxt: { flex: 1, fontSize: 13, fontWeight: "500" },
+  clearBtn:          { padding: 2 },
+  typeChip:          { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7, marginRight: 8 },
+  typeChipTxt:       { fontSize: 13, fontWeight: "500" },
+  switchRow:         { flexDirection: "row", alignItems: "center", borderWidth: 0.5, borderRadius: 12, padding: 14, marginTop: 12 },
+  switchLabel:       { fontSize: 14, fontWeight: "500" },
+  switchSub:         { fontSize: 12, marginTop: 2 },
+  remindGrid:        { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
+  remindChip:        { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
+  remindChipTxt:     { fontSize: 13, fontWeight: "500" },
 });

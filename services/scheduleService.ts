@@ -1,6 +1,7 @@
 import { getDb } from "../database/db";
 import { generateId } from "../utils/uuid";
 import { notifyScheduleChanged } from "../utils/scheduleEvents";
+import { cancelNotification } from "./notificationService"; // ← add this import
 
 export type ScheduleItem = {
   _id: string;
@@ -37,7 +38,6 @@ function rowToItem(row: any): ScheduleItem {
   };
 }
 
-// ── Shared today string helper ─────────────────────────────────────────────
 function getTodayString(): string {
   const now = new Date();
   const y   = now.getFullYear();
@@ -74,7 +74,6 @@ export const scheduleService = {
     return rows.map(rowToItem);
   },
 
-  // ✅ Queries SQLite directly — no need to load all records into memory
   getPendingUrgentCount: async (): Promise<number> => {
     const db = getDb();
     const today = getTodayString();
@@ -108,18 +107,18 @@ export const scheduleService = {
         data.type,
         data.date,
         data.startTime,
-        data.description        ?? "",
-        data.isCompleted        ? 1 : 0,
-        data.completedAt        ?? null,
-        data.isUrgent           ? 1 : 0,
-        data.courseId           ?? null,
+        data.description           ?? "",
+        data.isCompleted           ? 1 : 0,
+        data.completedAt           ?? null,
+        data.isUrgent              ? 1 : 0,
+        data.courseId              ?? null,
         data.reminderMinutesBefore ?? 15,
         now,
         now,
       ]
     );
 
-    notifyScheduleChanged(); // ✅ badge updates when a new urgent item is added
+    notifyScheduleChanged();
     return { ...data, _id: id };
   },
 
@@ -130,19 +129,18 @@ export const scheduleService = {
     const fields: string[] = [];
     const values: any[]    = [];
 
-    if (data.title              !== undefined) { fields.push("title = ?");               values.push(data.title); }
-    if (data.type               !== undefined) { fields.push("type = ?");                values.push(data.type); }
-    if (data.date               !== undefined) { fields.push("date = ?");                values.push(data.date); }
-    if (data.startTime          !== undefined) { fields.push("startTime = ?");           values.push(data.startTime); }
-    if (data.description        !== undefined) { fields.push("description = ?");         values.push(data.description); }
-    if (data.isUrgent           !== undefined) { fields.push("isUrgent = ?");            values.push(data.isUrgent ? 1 : 0); }
-    if (data.courseId           !== undefined) { fields.push("courseId = ?");            values.push(data.courseId); }
+    if (data.title                 !== undefined) { fields.push("title = ?");               values.push(data.title); }
+    if (data.type                  !== undefined) { fields.push("type = ?");                values.push(data.type); }
+    if (data.date                  !== undefined) { fields.push("date = ?");                values.push(data.date); }
+    if (data.startTime             !== undefined) { fields.push("startTime = ?");           values.push(data.startTime); }
+    if (data.description           !== undefined) { fields.push("description = ?");         values.push(data.description); }
+    if (data.isUrgent              !== undefined) { fields.push("isUrgent = ?");            values.push(data.isUrgent ? 1 : 0); }
+    if (data.courseId              !== undefined) { fields.push("courseId = ?");            values.push(data.courseId); }
     if (data.reminderMinutesBefore !== undefined) {
       fields.push("reminderMinutesBefore = ?");
       values.push(data.reminderMinutesBefore);
     }
 
-    // ✅ Keep isCompleted and completedAt in sync
     if (data.isCompleted !== undefined) {
       fields.push("isCompleted = ?");
       values.push(data.isCompleted ? 1 : 0);
@@ -164,15 +162,17 @@ export const scheduleService = {
       values
     );
 
-    notifyScheduleChanged(); // ✅ badge updates instantly on any edit (complete, urgent toggle, etc.)
+    notifyScheduleChanged();
 
     const row = await db.getFirstAsync("SELECT * FROM schedules WHERE id = ?", [id]);
     return rowToItem(row);
   },
 
+  // ✅ THE FIX: cancel the notification before deleting from DB
   remove: async (id: string): Promise<void> => {
+    await cancelNotification(id); // ← cancels any pending notification for this schedule
     const db = getDb();
     await db.runAsync("DELETE FROM schedules WHERE id = ?", [id]);
-    notifyScheduleChanged(); // ✅ badge updates when a pending item is deleted
+    notifyScheduleChanged();
   },
 };

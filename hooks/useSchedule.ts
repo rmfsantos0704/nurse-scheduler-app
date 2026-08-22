@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { scheduleService, ScheduleItem } from "../services/scheduleService";
 import { toDateString, isPastDateTime } from "../utils/dateUtils";
-import { cancelNotification } from "../services/NotificationService";
+import { cancelNotification } from "../services/notificationService";
 
 export function useSchedules() {
   const [items,     setItems]     = useState<ScheduleItem[]>([]);

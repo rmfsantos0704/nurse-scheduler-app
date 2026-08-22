@@ -7,7 +7,6 @@ import { useCallback } from "react";
 import { useTheme } from "../context/ThemeContext";
 import { useSchedules } from "../hooks/useSchedule";
 import { useCourses } from "../hooks/useCourses";
-import { WeeklyChart } from "../components/WeeklyChart";
 import { CourseChips } from "../components/CourseChips";
 import { DateStrip } from "../components/DateStrip";
 import { ScheduleDetailModal } from "../components/ScheduleDetailModal";
@@ -25,7 +24,6 @@ export default function FilterPage() {
   const { courses, fetch: fetchCourses } = useCourses();
   const { granted: notifGranted } = useNotifications();
 
-  // Use toDateString (local time) instead of toISOString (UTC) to avoid date mismatch in PH (UTC+8)
   const todayStr = toDateString(new Date());
 
   const [selectedDate,     setSelectedDate]     = useState(todayStr);
@@ -37,7 +35,6 @@ export default function FilterPage() {
   const [formVisible,   setFormVisible]   = useState(false);
   const [saving,        setSaving]        = useState(false);
 
-  // Form fields for edit
   const [title,          setTitle]          = useState("");
   const [selectedType,   setSelectedType]   = useState<ScheduleType>("Class");
   const [description,    setDescription]    = useState("");
@@ -49,7 +46,6 @@ export default function FilterPage() {
   const [remindMinutes,  setRemindMinutes]  = useState(15);
   const [formCourseId,   setFormCourseId]   = useState<string | null>(null);
 
-  // Fetch data whenever this screen comes into focus
   useFocusEffect(
     useCallback(() => {
       fetch();
@@ -64,7 +60,7 @@ export default function FilterPage() {
 
   const filteredItems = useMemo(() => {
     return items.filter(item => {
-      const itemDate    = item.date?.slice(0, 10); // normalize — strip any time portion
+      const itemDate    = item.date?.slice(0, 10);
       const dateMatch   = itemDate === selectedDate;
       const courseMatch = selectedCourseId === null || item.courseId === selectedCourseId;
       return dateMatch && courseMatch;
@@ -166,10 +162,6 @@ export default function FilterPage() {
               <Text style={[s.pageSubtitle, { color: colors.textSecondary }]}>Find schedules by date or course</Text>
             </View>
           </View>
-
-          {/* Weekly Chart */}
-          <Text style={[s.sec, { color: colors.textSecondary }]}>Weekly activity</Text>
-          <WeeklyChart colors={colors} items={items} />
 
           {/* Date Strip */}
           <Text style={[s.sec, { color: colors.textSecondary }]}>Browse days</Text>

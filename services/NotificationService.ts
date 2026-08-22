@@ -6,20 +6,10 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
-shouldShowBanner: true, shouldShowList: true,   
-}), });
-
-// Type icons shown in the notification body
-const TYPE_EMOJI: Record<string, string> = {
-  Quiz:     "📝",
-  Activity: "⚡",
-  Review:   "📖",
-  Class:    "🏫",
-  Duty:     "🏥",
-  Study:    "📚",
-  Exam:     "📋",
-  General:  "📌",
-};
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 const TYPE_LABEL: Record<string, string> = {
   Quiz:     "Quiz",
@@ -30,6 +20,18 @@ const TYPE_LABEL: Record<string, string> = {
   Study:    "Study session",
   Exam:     "Exam",
   General:  "General",
+};
+
+// Type colors — matches the app's schedule type palette
+const TYPE_COLOR: Record<string, string> = {
+  Quiz:     "#BA7517",
+  Activity: "#1FA0A0",
+  Review:   "#7F77DD",
+  Class:    "#c5cf08",
+  Duty:     "#D4537E",
+  Study:    "#378ADD",
+  Exam:     "#E24B4A",
+  General:  "#21a702",
 };
 
 // Map color scheme name → hex (mirrors ThemeContext)
@@ -53,16 +55,14 @@ export async function registerForPushNotifications(): Promise<boolean> {
   if (finalStatus !== "granted") return false;
 
   if (Platform.OS === "android") {
-    // Default channel
     await Notifications.setNotificationChannelAsync("SnowEd_default", {
-      name: "SnowEd— General",
+      name: "SnowEd — General",
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: "#D4537E",
       sound: "default",
     });
 
-    // Urgent channel
     await Notifications.setNotificationChannelAsync("SnowEd_urgent", {
       name: "SnowEd — Urgent",
       importance: Notifications.AndroidImportance.MAX,
@@ -99,42 +99,38 @@ export async function applySchemeToChannels(scheme: string): Promise<void> {
   });
 }
 
-// ─── Main schedule notification ───────────────────────────────────────────────
+// ─── Schedule a single reminder notification ──────────────────────────────────
 export async function scheduleActivityNotification(
   id: string,
   title: string,
   type: string,
   description: string,
-  dateTime: Date,
+  triggerDate: Date,
   isUrgent: boolean,
-  scheme: string
+  scheme: string,
+  eventTime: Date        // the actual event start time (not the trigger offset)
 ): Promise<void> {
   const now = new Date();
-  if (dateTime <= now) return;
+  if (triggerDate <= now) return;
 
   await cancelNotification(id);
   await applySchemeToChannels(scheme);
 
-  const emoji    = TYPE_EMOJI[type]  ?? "📌";
   const typeLabel = TYPE_LABEL[type] ?? type;
-  const channel  = isUrgent ? "SnowEd_urgent" : "SnowEd_default";
+  const typeColor = TYPE_COLOR[type] ?? SCHEME_COLOR[scheme] ?? "#D4537E";
+  const channel   = isUrgent ? "SnowEd_urgent" : "SnowEd_default";
 
-  const timeStr = dateTime.toLocaleTimeString([], {
-    hour: "2-digit", minute: "2-digit",
-  });
-  const dateStr = dateTime.toLocaleDateString([], {
-    weekday: "long", month: "long", day: "numeric",
-  });
+  const timeStr = eventTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const dateStr = eventTime.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
 
-  // ── AT-TIME notification ────────────────────────────────────────────────────
   await Notifications.scheduleNotificationAsync({
     identifier: id,
     content: {
-      title: `${emoji} ${isUrgent ? "⚠️ URGENT — " : ""}${title}`,
+      title: `${isUrgent ? "URGENT — " : ""}${title}`,
       body: [
         `${typeLabel} · ${timeStr}`,
         dateStr,
-        description ? `📍 ${description}` : null,
+        description ? `${description}` : null,
         isUrgent ? "This is marked as urgent — don't miss it!" : null,
       ]
         .filter(Boolean)
@@ -144,78 +140,17 @@ export async function scheduleActivityNotification(
       data: { scheduleId: id, type, isUrgent },
       ...(Platform.OS === "android" && {
         channelId: channel,
-        color: SCHEME_COLOR[scheme] ?? "#D4537E",
+        color: typeColor,
       }),
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DATE,
-      date: dateTime,
+      date: triggerDate,
     },
   });
-
-  // ── 15-MIN early warning ────────────────────────────────────────────────────
-  const earlyTime = new Date(dateTime.getTime() - 15 * 60 * 1000);
-  if (earlyTime > now) {
-    await Notifications.scheduleNotificationAsync({
-      identifier: `${id}_early`,
-      content: {
-        title: `⏳ Starting soon: ${title}`,
-        body: [
-          `${typeLabel} starts at ${timeStr}`,
-          description ? `📍 ${description}` : null,
-          "Get ready — 15 minutes to go!",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-        sound: true,
-        data: { scheduleId: id, type, isUrgent },
-        ...(Platform.OS === "android" && {
-          channelId: channel,
-          color: SCHEME_COLOR[scheme] ?? "#D4537E",
-        }),
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: earlyTime,
-      },
-    });
-  }
-
-  // ── 1-HOUR early warning (urgent only) ─────────────────────────────────────
-  if (isUrgent) {
-    const hourEarly = new Date(dateTime.getTime() - 60 * 60 * 1000);
-    if (hourEarly > now) {
-      await Notifications.scheduleNotificationAsync({
-        identifier: `${id}_1hr`,
-        content: {
-          title: `⚠️ Urgent reminder: ${title}`,
-          body: [
-            `${typeLabel} at ${timeStr}`,
-            dateStr,
-            description ? `📍 ${description}` : null,
-            "1 hour remaining — prepare now.",
-          ]
-            .filter(Boolean)
-            .join("\n"),
-          sound: true,
-          data: { scheduleId: id, type, isUrgent },
-          ...(Platform.OS === "android" && {
-            channelId: "SnowEd_urgent",
-            color: SCHEME_COLOR[scheme] ?? "#D4537E",
-          }),
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: hourEarly,
-        },
-      });
-    }
-  }
 }
 
-// ─── Cancel all notifications for a schedule ─────────────────────────────────
+// ─── Cancel the notification for a schedule ───────────────────────────────────
 export async function cancelNotification(id: string): Promise<void> {
   await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
-  await Notifications.cancelScheduledNotificationAsync(`${id}_early`).catch(() => {});
-  await Notifications.cancelScheduledNotificationAsync(`${id}_1hr`).catch(() => {});
 }

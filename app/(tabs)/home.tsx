@@ -1,5 +1,4 @@
-// app/(tabs)/home.tsx
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Image, RefreshControl } from "react-native";
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, RefreshControl } from "react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, router } from "expo-router";
@@ -12,7 +11,6 @@ import { useStreak } from "../../hooks/useStreak";
 import { OverviewCards } from "../../components/OverviewCards";
 import { NextEventCard } from "../../components/NextEventCard";
 import { UrgentList } from "../../components/UrgentList";
-import { ScheduleCard } from "../../components/ScheduleCard";
 import { ScheduleFormModal } from "../../modals/ScheduleFormModal";
 import { OverviewModal } from "../../modals/OverviewModal";
 import { ScheduleDetailModal } from "../../components/ScheduleDetailModal";
@@ -25,8 +23,7 @@ import { SafeScreen } from "../../components/SafeScreen";
 import { ScheduleTodayList } from "../../components/ScheduleTodayList";
 
 export default function Home() {
-  const MASCOT = require("../../assets/images/notification-icon.png");
-  const { colors, mode } = useTheme();
+  const { colors } = useTheme();
   const { items, loading, refreshing, fetch, refresh, toggleComplete, remove, stats, nextItem, urgentItems } = useSchedules();
   const { profile, load: loadProfile } = useProfile();
   const { granted: notifGranted } = useNotifications();
@@ -41,7 +38,7 @@ export default function Home() {
   const [formVisible,     setFormVisible]     = useState(false);
   const [saving,          setSaving]          = useState(false);
 
-  // ✅ Multi-delete state
+  // Multi-delete state
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds,   setSelectedIds]   = useState<Set<string>>(new Set());
   const [deleting,      setDeleting]      = useState(false);
@@ -82,19 +79,10 @@ export default function Home() {
     [items]
   );
 
-  // ── Selection helpers ─────────────────────────────────────────────────
-  const enterSelectionMode = () => {
-    setSelectionMode(true);
-    setSelectedIds(new Set());
-  };
-
-  const exitSelectionMode = () => {
-    setSelectionMode(false);
-    setSelectedIds(new Set());
-  };
+  const enterSelectionMode = () => { setSelectionMode(true); setSelectedIds(new Set()); };
+  const exitSelectionMode  = () => { setSelectionMode(false); setSelectedIds(new Set()); };
 
   const toggleSelect = (id: string) => {
-    // ✅ Auto-enter selection mode on long-press from ScheduleTodayList
     if (!selectionMode) setSelectionMode(true);
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -103,10 +91,7 @@ export default function Home() {
     });
   };
 
-  const selectAll = () => {
-    setSelectedIds(new Set(todayItems.map(i => i._id)));
-  };
-
+  const selectAll  = () => setSelectedIds(new Set(todayItems.map(i => i._id)));
   const allSelected = todayItems.length > 0 && selectedIds.size === todayItems.length;
 
   const handleBulkDelete = () => {
@@ -122,7 +107,6 @@ export default function Home() {
           onPress: async () => {
             setDeleting(true);
             try {
-              // ✅ Delete all selected in parallel
               await Promise.all([...selectedIds].map(id => scheduleService.remove(id)));
               await fetch();
               exitSelectionMode();
@@ -137,7 +121,6 @@ export default function Home() {
     );
   };
 
-  // ── Edit helpers ──────────────────────────────────────────────────────
   const resetForm = () => {
     setTitle(""); setSelectedType("Class"); setDescription("");
     setIsUrgentForm(false); setFormDate(new Date()); setFormTime(new Date());
@@ -203,18 +186,19 @@ export default function Home() {
         >
           {/* GREETING ROW */}
           <View style={s.greetRow}>
-            <View style={[s.mascotWrap, {
-              backgroundColor: mode === "light" ? colors.primaryDark : colors.primaryLight,
-            }]}>
-              <Image source={MASCOT} style={s.mascot} resizeMode="contain" />
-            </View>
-
             <View style={{ flex: 1 }}>
-              <Text style={[s.greetSub, { color: colors.textSecondary }]}>{greeting},</Text>
+              <Text style={[s.greetSub,  { color: colors.textSecondary }]}>{greeting},</Text>
               <Text style={[s.greetName, { color: colors.textPrimary }]}>SnowEd</Text>
             </View>
 
             <StreakCounter colors={colors} streak={streak} />
+
+            <TouchableOpacity
+              onPress={() => router.push("/stats")}
+              style={[s.iconBtn, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
+            >
+              <Ionicons name="bar-chart-outline" size={20} color={colors.primary} />
+            </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => router.push("/filter")}
@@ -257,16 +241,14 @@ export default function Home() {
             </View>
           )}
 
-          {/* ── SCHEDULE TODAY HEADER ── */}
+          {/* SCHEDULE TODAY HEADER */}
           <View style={s.secRow}>
             <Text style={[s.sec, { color: colors.textSecondary, marginBottom: 0, marginTop: 0 }]}>
               Schedule today
             </Text>
-
             <View style={s.secActions}>
               {selectionMode ? (
                 <>
-                  {/* Select all toggle */}
                   <TouchableOpacity
                     onPress={allSelected ? exitSelectionMode : selectAll}
                     style={[s.secBtn, { borderColor: colors.cardBorder, backgroundColor: colors.card }]}
@@ -281,7 +263,6 @@ export default function Home() {
                     </Text>
                   </TouchableOpacity>
 
-                  {/* Delete selected */}
                   <TouchableOpacity
                     onPress={handleBulkDelete}
                     disabled={selectedIds.size === 0 || deleting}
@@ -297,13 +278,11 @@ export default function Home() {
                     </Text>
                   </TouchableOpacity>
 
-                  {/* Cancel */}
                   <TouchableOpacity onPress={exitSelectionMode} style={s.cancelBtn}>
                     <Ionicons name="close" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
                 </>
               ) : (
-                /* ✅ Entry point — only shown when there are today's items */
                 todayItems.length > 0 && (
                   <TouchableOpacity
                     onPress={enterSelectionMode}
@@ -386,13 +365,10 @@ export default function Home() {
 const s = StyleSheet.create({
   screen:      { flex: 1, padding: 16 },
   greetRow:    { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16, paddingTop: 8 },
-  mascotWrap:  { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  mascot:      { width: 34, height: 34 },
   iconBtn:     { width: 42, height: 42, borderRadius: 21, borderWidth: 0.5, alignItems: "center", justifyContent: "center" },
   greetSub:    { fontSize: 13 },
   greetName:   { fontSize: 20, fontWeight: "500" },
   sec:         { fontSize: 11, fontWeight: "500", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 8, marginTop: 8 },
-  // ✅ Section header row — label + action buttons side by side
   secRow:      { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8, marginTop: 8 },
   secActions:  { flexDirection: "row", alignItems: "center", gap: 6 },
   secBtn:      { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 0.5, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },

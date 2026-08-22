@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import * as Notifications from "expo-notifications";
-import { registerForPushNotifications } from "../services/NotificationService";
+import { registerForPushNotifications } from "../services/notificationService";
 
 export function useNotifications() {
   const [granted, setGranted] = useState(false);
