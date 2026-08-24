@@ -12,7 +12,8 @@ type Props = {
   onOpenDetail: (item: ScheduleItem) => void;
   onEdit: (item: ScheduleItem) => void;
   onDelete: (item: ScheduleItem) => void;
-  onToggleComplete: (id: string) => void;
+  onToggleComplete: (item: ScheduleItem) => void;
+  showCompletionAction?: boolean;
   selectionMode: boolean;
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
@@ -21,6 +22,7 @@ type Props = {
 export function ScheduleTodayList({
   items, colors,
   onOpenDetail, onEdit, onDelete, onToggleComplete,
+  showCompletionAction = true,
   selectionMode, selectedIds, onToggleSelect,
 }: Props) {
   const { mode } = useTheme();
@@ -132,13 +134,15 @@ export function ScheduleTodayList({
                 {/* Actions */}
                 {!selectionMode && (
                   <View style={s.actions}>
-                    <TouchableOpacity onPress={() => onToggleComplete(item._id)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                      <Ionicons
-                        name={item.isCompleted ? "checkmark-circle" : "checkmark-circle-outline"}
-                        size={16}
-                        color={item.isCompleted ? "#2E7D32" : colors.textSecondary}
-                      />
-                    </TouchableOpacity>
+                    {showCompletionAction && (
+                      <TouchableOpacity onPress={() => onToggleComplete(item)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                        <Ionicons
+                          name={item.isCompleted ? "checkmark-circle" : "checkmark-circle-outline"}
+                          size={16}
+                          color={item.isCompleted ? "#2E7D32" : colors.textSecondary}
+                        />
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity onPress={() => onEdit(item)} disabled={isOverdue || item.isCompleted} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                       <Ionicons name="pencil-outline" size={14} color={isOverdue || item.isCompleted ? colors.textSecondary + "40" : colors.textSecondary} />
                     </TouchableOpacity>

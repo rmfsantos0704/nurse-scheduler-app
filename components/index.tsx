@@ -59,7 +59,8 @@ export default function Home() {
   const [formTime,         setFormTime]         = useState(new Date());
   const [showDatePicker,   setShowDatePicker]   = useState(false);
   const [showTimePicker,   setShowTimePicker]   = useState(false);
-  const [remindMinutes,    setRemindMinutes]    = useState(15);
+  const [reminderTime, setReminderTime] = useState(new Date());
+  const [showReminderPicker, setShowReminderPicker] = useState(false);
   const [formCourseId,     setFormCourseId]     = useState<string | null>(null);
 
   const hour     = new Date().getHours();
@@ -101,7 +102,7 @@ export default function Home() {
   const resetForm = () => {
     setTitle(""); setSelectedType("Class"); setDescription("");
     setIsUrgentForm(false); setFormDate(new Date()); setFormTime(new Date());
-    setRemindMinutes(15); setFormCourseId(null);
+    setReminderTime(new Date()); setShowReminderPicker(false); setFormCourseId(null);
   };
 
   const openEdit = (item: ScheduleItem) => {
@@ -110,7 +111,7 @@ export default function Home() {
     setSelectedType(item.type as ScheduleType);
     setDescription(item.description || "");
     setIsUrgentForm(item.isUrgent || false);
-    setRemindMinutes(item.reminderMinutesBefore ?? 15);
+    setReminderTime(item.reminderTime ? buildDateTime(item.date, item.reminderTime) : buildDateTime(item.date, item.startTime));
     setFormCourseId(item.courseId || null);
     if (item.date) {
       const [y, m, d] = item.date.split("-").map(Number);
@@ -139,7 +140,8 @@ export default function Home() {
         title: title.trim(), type: selectedType, date: dateStr,
         startTime: timeStr, description: description.trim(),
         isUrgent: isUrgentForm, courseId: formCourseId,
-        reminderMinutesBefore: remindMinutes,
+        reminderMinutesBefore: 0,
+        reminderTime: toTimeString(reminderTime),
       });
       await fetch();
       closeForm();
@@ -331,7 +333,8 @@ export default function Home() {
         selectedTime={formTime} setSelectedTime={setFormTime}
         showDatePicker={showDatePicker} setShowDatePicker={setShowDatePicker}
         showTimePicker={showTimePicker} setShowTimePicker={setShowTimePicker}
-        remindMinutes={remindMinutes} setRemindMinutes={setRemindMinutes}
+        reminderTime={reminderTime} setReminderTime={setReminderTime}
+        showReminderPicker={showReminderPicker} setShowReminderPicker={setShowReminderPicker}
         courses={courses} selectedCourseId={formCourseId} setSelectedCourseId={setFormCourseId}
         toTimeString={toTimeString}
         onDelete={editingItem ? () => { closeForm(); handleDelete(editingItem); } : undefined}

@@ -43,7 +43,8 @@ export default function FilterPage() {
   const [formTime,       setFormTime]       = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [remindMinutes,  setRemindMinutes]  = useState(15);
+  const [reminderTime, setReminderTime] = useState(new Date());
+  const [showReminderPicker, setShowReminderPicker] = useState(false);
   const [formCourseId,   setFormCourseId]   = useState<string | null>(null);
 
   useFocusEffect(
@@ -78,7 +79,7 @@ export default function FilterPage() {
     setSelectedType(item.type as ScheduleType);
     setDescription(item.description || "");
     setIsUrgent(item.isUrgent || false);
-    setRemindMinutes(item.reminderMinutesBefore ?? 15);
+    setReminderTime(item.reminderTime ? buildDateTime(item.date, item.reminderTime) : buildDateTime(item.date, item.startTime));
     setFormCourseId(item.courseId || null);
     if (item.date) {
       const [y, m, d] = item.date.slice(0, 10).split("-").map(Number);
@@ -99,7 +100,7 @@ export default function FilterPage() {
     setIsUrgent(false);
     setFormDate(new Date());
     setFormTime(new Date());
-    setRemindMinutes(15);
+    setReminderTime(new Date()); setShowReminderPicker(false);
     setFormCourseId(null);
   };
 
@@ -115,7 +116,7 @@ export default function FilterPage() {
         description:          description.trim(),
         isUrgent,
         courseId:             formCourseId,
-        reminderMinutesBefore: remindMinutes,
+        reminderMinutesBefore: 0, reminderTime: toTimeString(reminderTime),
       });
       await fetch();
       closeForm();
@@ -230,7 +231,8 @@ export default function FilterPage() {
         selectedTime={formTime}     setSelectedTime={setFormTime}
         showDatePicker={showDatePicker} setShowDatePicker={setShowDatePicker}
         showTimePicker={showTimePicker} setShowTimePicker={setShowTimePicker}
-        remindMinutes={remindMinutes}   setRemindMinutes={setRemindMinutes}
+        reminderTime={reminderTime} setReminderTime={setReminderTime}
+        showReminderPicker={showReminderPicker} setShowReminderPicker={setShowReminderPicker}
         courses={courses}
         selectedCourseId={formCourseId} setSelectedCourseId={setFormCourseId}
         toTimeString={toTimeString}

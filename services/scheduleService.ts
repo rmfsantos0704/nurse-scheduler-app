@@ -15,6 +15,7 @@ export type ScheduleItem = {
   isUrgent?: boolean;
   courseId?: string | null;
   reminderMinutesBefore?: number;
+  reminderTime?: string | null;
   courseName?: string | null;
   code?: string;
   color?: string;
@@ -35,6 +36,7 @@ function rowToItem(row: any): ScheduleItem {
     courseName:            row.courseName ?? null,
     code:                  row.courseCode ?? null,
     reminderMinutesBefore: row.reminderMinutesBefore ?? 15,
+    reminderTime:          row.reminderTime ?? null,
   };
 }
 
@@ -99,8 +101,8 @@ export const scheduleService = {
       `INSERT INTO schedules
         (id, title, type, date, startTime, description,
          isCompleted, completedAt, isUrgent, courseId,
-         reminderMinutesBefore, createdAt, updatedAt)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         reminderMinutesBefore, reminderTime, createdAt, updatedAt)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         id,
         data.title,
@@ -113,6 +115,7 @@ export const scheduleService = {
         data.isUrgent              ? 1 : 0,
         data.courseId              ?? null,
         data.reminderMinutesBefore ?? 15,
+        data.reminderTime         ?? null,
         now,
         now,
       ]
@@ -139,6 +142,10 @@ export const scheduleService = {
     if (data.reminderMinutesBefore !== undefined) {
       fields.push("reminderMinutesBefore = ?");
       values.push(data.reminderMinutesBefore);
+    }
+    if (data.reminderTime !== undefined) {
+      fields.push("reminderTime = ?");
+      values.push(data.reminderTime);
     }
 
     if (data.isCompleted !== undefined) {

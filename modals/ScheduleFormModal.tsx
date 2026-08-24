@@ -7,16 +7,6 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { TYPES, TYPE_COLORS } from "../constants/scheduleTypes";
 import type { ScheduleItem } from "../services/scheduleService";
 
-const REMIND_OPTIONS = [
-  { label: "At start time",  value: 0    },
-  { label: "5 min before",   value: 5    },
-  { label: "15 min before",  value: 15   },
-  { label: "30 min before",  value: 30   },
-  { label: "1 hour before",  value: 60   },
-  { label: "2 hours before", value: 120  },
-  { label: "1 day before",   value: 1440 },
-];
-
 type Props = {
   visible: boolean;
   onClose: () => void;
@@ -34,7 +24,8 @@ type Props = {
   selectedTime: Date; setSelectedTime: (d: Date) => void;
   showDatePicker: boolean; setShowDatePicker: (v: boolean) => void;
   showTimePicker: boolean; setShowTimePicker: (v: boolean) => void;
-  remindMinutes: number; setRemindMinutes: (v: number) => void;
+  reminderTime: Date; setReminderTime: (d: Date) => void;
+  showReminderPicker: boolean; setShowReminderPicker: (v: boolean) => void;
   courses: { _id: string; name: string; code: string; color: string }[];
   selectedCourseId: string | null; setSelectedCourseId: (v: string | null) => void;
   toTimeString: (d: Date) => string;
@@ -47,7 +38,7 @@ export function ScheduleFormModal({
   description, setDescription, isUrgent, setIsUrgent,
   selectedDate, setSelectedDate, selectedTime, setSelectedTime,
   showDatePicker, setShowDatePicker, showTimePicker, setShowTimePicker,
-  remindMinutes, setRemindMinutes,
+  reminderTime, setReminderTime, showReminderPicker, setShowReminderPicker,
   courses, selectedCourseId, setSelectedCourseId,
   toTimeString, onDelete,
 }: Props) {
@@ -143,17 +134,16 @@ export function ScheduleFormModal({
 
             {/* Remind */}
             <Text style={[s.lbl, { color: colors.textSecondary }]}>When to remind</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                {REMIND_OPTIONS.map(opt => (
-                  <TouchableOpacity key={opt.value} onPress={() => setRemindMinutes(opt.value)}
-                    style={[s.chip, { borderColor: remindMinutes === opt.value ? colors.primary : colors.cardBorder, backgroundColor: remindMinutes === opt.value ? colors.primaryLight : colors.card }]}
-                  >
-                    <Text style={[s.chipTxt, { color: remindMinutes === opt.value ? colors.primary : colors.textSecondary }]}>{opt.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
+            <TouchableOpacity style={[s.picker, { backgroundColor: colors.card, borderColor: colors.cardBorder }]} onPress={() => setShowReminderPicker(true)}>
+              <Ionicons name="alarm-outline" size={18} color={colors.primary} />
+              <Text style={[s.pickerTxt, { color: colors.textPrimary }]}>{toTimeString(reminderTime)}</Text>
+              <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+            </TouchableOpacity>
+            {showReminderPicker && (
+              <DateTimePicker value={reminderTime} mode="time" is24Hour={false}
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                onChange={(_, t) => { setShowReminderPicker(Platform.OS === "ios"); if (t) setReminderTime(t); }} />
+            )}
 
             {/* Description */}
             <Text style={[s.lbl, { color: colors.textSecondary }]}>Notes / description</Text>

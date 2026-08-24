@@ -26,14 +26,6 @@ const TYPE_COLORS: Record<string, string> = {
   Class: "#c5cf08", Duty: "#D4537E", Study: "#378ADD", General: "#21a702",
 };
 
-const REMIND_OPTIONS: { label: string; value: number | null }[] = [
-  { label: "Start time", value: null },
-  { label: "5 min",      value: 5   },
-  { label: "15 min", value: 15 },
-  { label: "30 min", value: 30 },
-  { label: "1 hr",   value: 60 },
-];
-
 export default function AddSchedule() {
   const { colors, scheme } = useTheme();
   const { courses, fetch: fetchCourses } = useCourses();
@@ -47,7 +39,8 @@ export default function AddSchedule() {
   const [selectedTime,     setSelectedTime]     = useState(new Date());
   const [showDatePicker,   setShowDatePicker]   = useState(false);
   const [showTimePicker,   setShowTimePicker]   = useState(false);
-  const [remindMinutes,    setRemindMinutes]    = useState<number | null>(15);
+  const [reminderTime,     setReminderTime]     = useState(new Date());
+  const [showReminderPicker, setShowReminderPicker] = useState(false);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [saving,           setSaving]           = useState(false);
   const [descHeight,       setDescHeight]       = useState(80);
@@ -69,11 +62,12 @@ export default function AddSchedule() {
         title: title.trim(), type: selectedType, date: dateStr,
         startTime: timeStr, description: description.trim(),
         isUrgent, isCompleted: false, courseId: selectedCourseId,
-        reminderMinutesBefore: remindMinutes ?? 0,
+        reminderMinutesBefore: 0,
+        reminderTime: toTimeString(reminderTime),
       });
       if (notifGranted) {
         const dt      = buildDateTime(dateStr, timeStr);
-        const trigger = remindMinutes === null ? dt : new Date(dt.getTime() - remindMinutes * 60000);
+        const trigger = buildDateTime(dateStr, toTimeString(reminderTime));
         await scheduleActivityNotification(
           created._id, created.title, created.type,
           created.description ?? "", trigger > new Date() ? trigger : dt,
@@ -275,22 +269,23 @@ export default function AddSchedule() {
         {notifGranted && (
           <>
             <Text style={[s.label, { color: colors.textSecondary }]}>Remind me</Text>
-            <View style={s.remindGrid}>
-              {REMIND_OPTIONS.map(opt => (
-                <TouchableOpacity
-                  key={String(opt.value)}
-                  onPress={() => setRemindMinutes(opt.value)}
-                  style={[s.remindChip, {
-                    backgroundColor: remindMinutes === opt.value ? colors.primary : colors.card,
-                    borderColor:     remindMinutes === opt.value ? colors.primary : colors.cardBorder,
-                  }]}
-                >
-                  <Text style={[s.remindChipTxt, { color: remindMinutes === opt.value ? "#fff" : colors.textSecondary }]}>
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <TouchableOpacity
+              style={[s.inputRow, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
+              onPress={() => setShowReminderPicker(v => !v)}
+            >
+              <Ionicons name="alarm-outline" size={18} color={colors.textSecondary} />
+              <Text style={[s.inputRowTxt, { color: colors.textPrimary }]}>
+                {toTimeString(reminderTime)}
+              </Text>
+            </TouchableOpacity>
+            {showReminderPicker && (
+              <DateTimePicker
+                value={reminderTime}
+                mode="time"
+                display="default"
+                onChange={(_, t) => { setShowReminderPicker(false); if (t) setReminderTime(t); }}
+              />
+            )}
           </>
         )}
 
@@ -340,7 +335,4 @@ const s = StyleSheet.create({
   switchRow:         { flexDirection: "row", alignItems: "center", borderWidth: 0.5, borderRadius: 12, padding: 14, marginTop: 12 },
   switchLabel:       { fontSize: 14, fontWeight: "500" },
   switchSub:         { fontSize: 12, marginTop: 2 },
-  remindGrid:        { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
-  remindChip:        { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
-  remindChipTxt:     { fontSize: 13, fontWeight: "500" },
 });

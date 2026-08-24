@@ -32,6 +32,7 @@ export async function initDb(): Promise<void> {
       isUrgent              INTEGER DEFAULT 0,
       courseId              TEXT,
       reminderMinutesBefore INTEGER DEFAULT 15,
+      reminderTime          TEXT,
       createdAt             TEXT DEFAULT (datetime('now')),
       updatedAt             TEXT DEFAULT (datetime('now'))
     );
@@ -75,6 +76,16 @@ export async function initDb(): Promise<void> {
     }
   } catch (e) {
     console.error("Migration (completedAt) failed:", e);
+  }
+
+  try {
+    const scheduleColumns: any[] = await db.getAllAsync("PRAGMA table_info(schedules)");
+    if (!scheduleColumns.some(col => col.name === "reminderTime")) {
+      await db.execAsync("ALTER TABLE schedules ADD COLUMN reminderTime TEXT;");
+      console.log("Migration: added reminderTime column.");
+    }
+  } catch (e) {
+    console.error("Migration (reminderTime) failed:", e);
   }
 
   try {
