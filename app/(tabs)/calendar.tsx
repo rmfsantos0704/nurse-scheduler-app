@@ -1,17 +1,17 @@
-import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, ActivityIndicator, RefreshControl, Alert, Platform } from "react-native";
-import { useState, useCallback } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
+import { ActivityIndicator, Alert, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { isPastDateTime, toTimeString, toDateString, buildDateTime } from "../../utils/dateUtils";
-import { useTheme } from "../../context/ThemeContext";
-import { ScheduleDetailModal } from "../../components/ScheduleDetailModal";
 import { ScheduleCard } from "../../components/ScheduleCard";
-import { ScheduleFormModal } from "../../modals/ScheduleFormModal";
-import { scheduleService, ScheduleItem } from "../../services/scheduleService";
-import { useNotifications } from "../../hooks/useNotification";
-import { useCourses } from "../../hooks/useCourses";
+import { ScheduleDetailModal } from "../../components/ScheduleDetailModal";
 import type { ScheduleType } from "../../constants/scheduleTypes";
+import { useTheme } from "../../context/ThemeContext";
+import { useCourses } from "../../hooks/useCourses";
+import { useNotifications } from "../../hooks/useNotification";
+import { ScheduleFormModal } from "../../modals/ScheduleFormModal";
+import { ScheduleItem, scheduleService } from "../../services/scheduleService";
+import { buildDateTime, isPastDateTime, toDateString, toTimeString } from "../../utils/dateUtils";
 
 const DAYS   = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = [
@@ -21,7 +21,7 @@ const MONTHS = [
 
 const TYPE_COLORS: Record<string, string> = {
   Quiz:     "#BA7517",
-  Activity: "rgb(31,160,160)",
+  Activity: "#17ba97",
   Review:   "#7F77DD",
   Class:    "#c5cf08",
   Duty:     "#D4537E",
@@ -327,7 +327,7 @@ export default function Calendar() {
           {([
             ["Class",    "#c5cf08"         ],
             ["Quiz",     "#BA7517"         ],
-            ["Activity", "rgb(31,160,160)" ],
+            ["Activity", "#17ba97" ],
             ["Review",   "#7F77DD"         ],
             ["Duty",     "#D4537E"         ],
             ["Study",    "#378ADD"         ],

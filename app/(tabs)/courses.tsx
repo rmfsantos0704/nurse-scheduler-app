@@ -1,15 +1,22 @@
-import {
-  View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView,
-  TextInput, Alert, ActivityIndicator, RefreshControl,
-} from "react-native";
-import { useState, useCallback } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, router } from "expo-router";
-import { useTheme } from "../../context/ThemeContext";
-import { ScheduleDetailModal } from "../../components/ScheduleDetailModal";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeScreen } from "../../components/SafeScreen";
+import { ScheduleDetailModal } from "../../components/ScheduleDetailModal";
+import { useTheme } from "../../context/ThemeContext";
 import { courseService } from "../../services/courseService";
-import { scheduleService } from "../../services/scheduleService";
 
 type Timeslot = { day: string; startTime: string; endTime: string };
 
@@ -42,7 +49,7 @@ const COURSE_COLORS = [
 ];
 
 const TYPE_COLORS: Record<string, string> = {
-  Quiz:"#BA7517", Activity:"rgb(31, 160, 160)", Review:"#7F77DD",
+  Quiz:"#BA7517", Activity:"#17ba97", Review:"#7F77DD",
   Class:"#c5cf08", Duty:"#D4537E", Study:"#378ADD", Exam:"#E24B4A", General:"#21a702",
 };
 const TYPE_BG: Record<string, string> = {

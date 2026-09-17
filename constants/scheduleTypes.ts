@@ -4,7 +4,7 @@ export const TYPES: ScheduleType[] = ["Class", "Quiz", "Activity", "Review", "Du
 
 export const TYPE_COLORS: Record<ScheduleType, string> = {
   Quiz:     "#BA7517",
-  Activity: "rgb(31,160,160)",
+  Activity: "#2DD4BF", // Lighter, more luminous teal
   Review:   "#7F77DD",
   Class:    "#c5cf08",
   Duty:     "#D4537E",
@@ -14,7 +14,7 @@ export const TYPE_COLORS: Record<ScheduleType, string> = {
 
 export const TYPE_BG: Record<ScheduleType, string> = {
   Quiz:     "rgba(186, 117, 23,  0.15)",
-  Activity: "rgba(31,  160, 160, 0.15)",
+  Activity: "rgba(45, 212, 191, 0.15)", // Adjusted to match the new hex
   Review:   "rgba(127, 119, 221, 0.15)",
   Class:    "rgba(197, 207, 8,   0.15)",
   Duty:     "rgba(212, 83,  126, 0.15)",

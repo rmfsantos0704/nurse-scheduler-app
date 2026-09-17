@@ -1,28 +1,33 @@
-import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, Alert, ActivityIndicator, Switch,
-} from "react-native";
-import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import { useFocusEffect } from "expo-router";
-import { useCallback } from "react";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeScreen } from "../components/SafeScreen";
+import type { ScheduleType } from "../constants/scheduleTypes";
 import { useTheme } from "../context/ThemeContext";
 import { useCourses } from "../hooks/useCourses";
 import { useNotifications } from "../hooks/useNotification";
-import { scheduleService } from "../services/scheduleService";
 import { scheduleActivityNotification } from "../services/notificationService";
-import { SafeScreen } from "../components/SafeScreen";
-import { toTimeString, toDateString, buildDateTime } from "../utils/dateUtils";
-import type { ScheduleType } from "../constants/scheduleTypes";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import { scheduleService } from "../services/scheduleService";
+import { buildDateTime, toDateString, toTimeString } from "../utils/dateUtils";
 
 const TYPES: ScheduleType[] = [
   "Class", "Quiz", "Activity", "Review", "Duty", "Study", "General",
 ];
 
 const TYPE_COLORS: Record<string, string> = {
-  Quiz: "#BA7517", Activity: "rgb(31,160,160)", Review: "#7F77DD",
+  Quiz: "#BA7517", Activity: "#17ba97", Review: "#7F77DD",
   Class: "#c5cf08", Duty: "#D4537E", Study: "#378ADD", General: "#21a702",
 };
 

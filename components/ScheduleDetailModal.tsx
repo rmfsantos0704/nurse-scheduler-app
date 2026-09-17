@@ -1,7 +1,12 @@
-import {
-  Modal, View, Text, StyleSheet, TouchableOpacity, ScrollView,
-} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import {
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export type ScheduleItem = {
   _id: string; 
@@ -20,7 +25,7 @@ export type ScheduleItem = {
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  Quiz: "#BA7517", Activity: "rgb(31, 160, 160)", Review: "#7F77DD",
+  Quiz: "#BA7517", Activity: "#17ba97", Review: "#7F77DD",
   Class: "#c5cf08", Duty: "#D4537E", Study: "#378ADD", Exam: "#E24B4A", General: "#21a702",
 };
 const TYPE_BG: Record<string, string> = {
